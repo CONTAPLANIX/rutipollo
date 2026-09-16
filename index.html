@@ -625,7 +625,8 @@
       .then(function(){
         if(!window.RUTIPOLLO_FIREBASE_CONFIG || !window.RUTIPOLLO_FIREBASE_CONFIG.apiKey || !window.firebase) return null;
         if(!firebase.apps.length) firebase.initializeApp(window.RUTIPOLLO_FIREBASE_CONFIG);
-        return firebase.firestore();
+        var fdb = firebase.firestore();
+        return fdb.enablePersistence({ synchronizeTabs: true }).catch(function(){}).then(function(){ return fdb; });
       })
       .catch(function(){ return null; })
       .then(function(db){
