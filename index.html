@@ -370,6 +370,21 @@
     return "https://www.google.com/maps?q="+ubicacion.lat+","+ubicacion.lon;
   }
 
+  var geocodeCache = {};
+  function reverseGeocode(ubicacion){
+    var key = ubicacion.lat.toFixed(5)+","+ubicacion.lon.toFixed(5);
+    if(geocodeCache[key]) return Promise.resolve(geocodeCache[key]);
+    var url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+ubicacion.lat+"&lon="+ubicacion.lon+"&zoom=18&addressdetails=0";
+    return fetch(url, { headers: { "Accept-Language": "es" } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var addr = d && d.display_name ? d.display_name : null;
+        if(addr) geocodeCache[key] = addr;
+        return addr;
+      })
+      .catch(function(){ return null; });
+  }
+
   function codigoDeProducto(nombre){
     var n = String(nombre||"").trim().toLowerCase();
     var p = state.productos.find(function(x){ return x.nombre.trim().toLowerCase()===n; });
@@ -1300,11 +1315,11 @@
   }
 
   function ticketHeightMm(venta, logoDataUrl){
-    var extra = (venta.notas ? 14 : 0) + (state.negocio.telefono ? 5 : 0) + (state.negocio.direccion ? 5 : 0) + (venta.ubicacion ? 5 : 0) + (estaPendiente(venta) ? 8 : 0) + (logoDataUrl ? 32 : 0);
+    var extra = (venta.notas ? 14 : 0) + (state.negocio.telefono ? 5 : 0) + (state.negocio.direccion ? 5 : 0) + (venta.ubicacion ? 20 : 0) + (estaPendiente(venta) ? 8 : 0) + (logoDataUrl ? 32 : 0);
     return Math.max(62 + venta.items.length*9 + extra, 90);
   }
 
-  function drawTicketOnDoc(doc, venta, logoDataUrl){
+  function drawTicketOnDoc(doc, venta, logoDataUrl, direccionTexto){
     var x = 5, w = 70, y = 10;
     function center(text, size, bold){ doc.setFont("courier", bold?"bold":"normal"); doc.setFontSize(size); doc.text(String(text), x+w/2, y, {align:"center", maxWidth:w}); }
     function row(label, val){ doc.setFont("courier","normal"); doc.setFontSize(9); doc.text(label, x, y); doc.text(String(val), x+w, y, {align:"right", maxWidth:w-25}); y+=5; }
@@ -1325,7 +1340,14 @@
     row("Tipo", venta.tipoPago==="credito" ? "Pendiente de pago" : "Contado");
     if(estaPagado(venta)) row("Pago", venta.metodoPago==="banco"?"Banco":"Efectivo");
     if(venta.vendedor) row("Vendedor", venta.vendedor);
-    if(venta.ubicacion) row("GPS", venta.ubicacion.lat.toFixed(5)+", "+venta.ubicacion.lon.toFixed(5));
+    if(venta.ubicacion){
+      doc.setFont("courier","normal"); doc.setFontSize(9); doc.text("Ubicación:", x, y); y+=4;
+      doc.setFontSize(7.5);
+      var dirTxt = direccionTexto || (venta.ubicacion.lat.toFixed(5)+", "+venta.ubicacion.lon.toFixed(5));
+      var dirLines = doc.splitTextToSize(dirTxt, w);
+      doc.text(dirLines, x, y);
+      y += dirLines.length*3.4 + 3;
+    }
     rule();
 
     venta.items.forEach(function(it){
@@ -1357,21 +1379,21 @@
     doc.text(doc.splitTextToSize("Documento interno - sin efectos tributarios (sin IGV)", w), x+w/2, y, {align:"center"});
   }
 
-  function buildTicketPdfBlob(venta, logoDataUrl){
+  function buildTicketPdfBlob(venta, logoDataUrl, direccionTexto){
     var jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
     if(!jsPDFCtor) return null;
     var doc = new jsPDFCtor({ unit:"mm", format:[80, ticketHeightMm(venta, logoDataUrl)] });
-    drawTicketOnDoc(doc, venta, logoDataUrl);
+    drawTicketOnDoc(doc, venta, logoDataUrl, direccionTexto);
     return doc.output("blob");
   }
 
-  function buildMultiTicketPdfBlob(ventas, logoDataUrl){
+  function buildMultiTicketPdfBlob(ventas, logoDataUrl, direcciones){
     var jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
     if(!jsPDFCtor || !ventas.length) return null;
     var doc = new jsPDFCtor({ unit:"mm", format:[80, ticketHeightMm(ventas[0], logoDataUrl)] });
     ventas.forEach(function(v, i){
       if(i>0) doc.addPage([80, ticketHeightMm(v, logoDataUrl)]);
-      drawTicketOnDoc(doc, v, logoDataUrl);
+      drawTicketOnDoc(doc, v, logoDataUrl, direcciones && direcciones[i]);
     });
     return doc.output("blob");
   }
@@ -1381,8 +1403,10 @@
   }
 
   function descargarPdfTicket(venta){
-    conLogoDataUrl().then(function(logoDataUrl){
-      var blob = buildTicketPdfBlob(venta, logoDataUrl);
+    var direccionPromise = venta.ubicacion ? reverseGeocode(venta.ubicacion) : Promise.resolve(null);
+    Promise.all([conLogoDataUrl(), direccionPromise]).then(function(res){
+      var logoDataUrl = res[0], direccionTexto = res[1];
+      var blob = buildTicketPdfBlob(venta, logoDataUrl, direccionTexto);
       if(!blob){ alert("No se pudo preparar el PDF. Intenta de nuevo en unos segundos."); return; }
       triggerDownload("nota_"+String(venta.correlativo).padStart(6,"0")+".pdf", blob);
     });
@@ -1412,7 +1436,8 @@
       + '      <div class="meta"><span>Tipo</span><span>'+(venta.tipoPago==="credito"?"Pendiente de pago":"Contado")+'</span></div>'
       + (estaPagado(venta) ? '      <div class="meta"><span>Pago</span><span>'+(venta.metodoPago==="banco"?"Banco":"Efectivo")+'</span></div>' : '')
       + (venta.vendedor ? '      <div class="meta"><span>Vendedor</span><span>'+escapeHtml(venta.vendedor)+'</span></div>' : '')
-      + (venta.ubicacion ? '      <div class="meta"><span>Ubicación</span><span><a href="'+mapsLink(venta.ubicacion)+'" target="_blank" rel="noopener" style="color:var(--accent);">Ver en el mapa</a></span></div>' : '')
+      + (venta.ubicacion ? '      <div class="meta" style="align-items:flex-start;"><span>Ubicación</span><span id="ticket-direccion" style="text-align:right;max-width:65%;">Buscando dirección…</span></div>'
+          + '      <div style="text-align:right;margin:-3px 0 2px;"><a href="'+mapsLink(venta.ubicacion)+'" target="_blank" rel="noopener" style="color:var(--accent);font-size:10.5px;">Ver en el mapa</a></div>' : '')
       + '      <hr>'
       + itemsHtml
       + '      <hr>'
@@ -1431,6 +1456,13 @@
       + '    </div>'
       + '  </div>'
       + '</div>';
+
+    if(venta.ubicacion){
+      reverseGeocode(venta.ubicacion).then(function(addr){
+        var el = document.getElementById("ticket-direccion");
+        if(el) el.textContent = addr || "No se pudo obtener la dirección";
+      });
+    }
   }
 
   function addDaysISO(iso, days){
@@ -1463,8 +1495,12 @@
   }
 
   function descargarPdfsMasivo(ventas, desde, hasta){
-    conLogoDataUrl().then(function(logoDataUrl){
-      var blob = buildMultiTicketPdfBlob(ventas, logoDataUrl);
+    var direccionesPromise = Promise.all(ventas.map(function(v){
+      return v.ubicacion ? reverseGeocode(v.ubicacion) : Promise.resolve(null);
+    }));
+    Promise.all([conLogoDataUrl(), direccionesPromise]).then(function(res){
+      var logoDataUrl = res[0], direcciones = res[1];
+      var blob = buildMultiTicketPdfBlob(ventas, logoDataUrl, direcciones);
       if(!blob){ alert("No se pudo preparar el PDF. Intenta de nuevo en unos segundos."); return; }
       triggerDownload("notas_"+desde+"_a_"+hasta+".pdf", blob);
     });
