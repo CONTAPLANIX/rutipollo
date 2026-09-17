@@ -158,6 +158,8 @@
   .today-strip{ display:flex; justify-content:space-between; align-items:center; background:linear-gradient(135deg,var(--paper-alt),var(--paper)); border:1px solid var(--line); border-radius:var(--r-md); padding:13px 18px; margin-bottom:18px; font-size:14px; box-shadow:var(--shadow-sm); }
   .today-strip .amt{ font-weight:600; color:var(--accent); font-size:17px; }
 
+  .backup-hint{ display:flex; justify-content:space-between; align-items:center; gap:12px; background:transparent; border:1px dashed var(--line-strong); border-radius:var(--r-md); padding:11px 16px; margin-bottom:18px; font-size:12.5px; color:var(--ink-soft); flex-wrap:wrap; }
+
   .card{ background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--r-md); padding:18px; box-shadow:var(--shadow); }
   .field{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
   .field label{ font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
@@ -1103,7 +1105,7 @@
 
     var diasResp = diasDesdeRespaldo();
     var avisoRespaldo = (state.ventas.length>=5 && diasResp>=14)
-      ? '<div class="today-strip" style="border-color:var(--danger);"><span>'+(diasResp===Infinity?"Nunca has exportado un respaldo.":"Hace "+Math.floor(diasResp)+" días que no exportas un respaldo.")+'</span><button class="btn btn-sm btn-primary" data-action="exportar-todo-csv">Respaldar ahora</button></div>'
+      ? '<div class="backup-hint"><span>'+(diasResp===Infinity?"Aún no has exportado un respaldo.":"Hace "+Math.floor(diasResp)+" días que no exportas un respaldo.")+'</span><button class="btn btn-sm" data-action="exportar-todo-csv">Respaldar ahora</button></div>'
       : '';
 
     return ''
