@@ -250,6 +250,10 @@
   .axis-line{ stroke:var(--line); stroke-width:1; }
 
   .prod-table td, .prod-table th{ font-size:14px; }
+  .cliente-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 0; border-bottom:1px dashed var(--line); }
+  .cliente-row:last-child{ border-bottom:none; }
+  .cliente-nombre{ font-size:14.5px; font-weight:500; overflow-wrap:anywhere; min-width:0; flex:1 1 160px; }
+  .cliente-acciones{ display:flex; gap:8px; flex:none; }
   .toolbar{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
   select.year-select{ background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--r-sm); padding:9px 12px; font-size:14px; box-shadow:var(--shadow-sm); }
 
@@ -496,8 +500,11 @@
     var list = productoSuggestions(query);
     if(!list.length){ el.hidden = true; el.innerHTML=""; return; }
     el.innerHTML = list.map(function(p){
+      var subParts = [];
+      if(p.codigo) subParts.push("Cód. "+p.codigo);
+      if(p.precio) subParts.push(fmt(p.precio));
       return '<div class="ac-item" data-action="elegir-producto" data-idx="'+idx+'" data-val="'+escapeHtml(p.nombre)+'" data-precio="'+(p.precio||0)+'">'+escapeHtml(p.nombre)
-        + (p.precio ? '<div class="sub">'+fmt(p.precio)+(p.codigo?" · "+escapeHtml(p.codigo):"")+'</div>' : '')
+        + (subParts.length ? '<div class="sub">'+escapeHtml(subParts.join(" · "))+'</div>' : '')
         + '</div>';
     }).join("");
     el.hidden = false;
@@ -980,7 +987,7 @@
   function itemRowHtml(item, idx){
     var sub = (Number(item.cantidad)||0) * (Number(item.precio)||0);
     return '<tr data-row="'+idx+'">'
-      + '<td><div class="ac-wrap"><input class="item-input" autocomplete="off" data-idx="'+idx+'" data-field="producto" value="'+escapeHtml(item.producto)+'" placeholder="Nombre del producto"><div class="ac-list" id="ac-item-'+idx+'" hidden></div></div></td>'
+      + '<td><div class="ac-wrap"><input class="item-input" autocomplete="off" data-idx="'+idx+'" data-field="producto" value="'+escapeHtml(item.producto)+'" placeholder="Nombre o código del producto"><div class="ac-list" id="ac-item-'+idx+'" hidden></div></div></td>'
       + '<td class="col-cant"><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="cantidad" value="'+item.cantidad+'"></td>'
       + '<td class="col-precio"><input class="item-input" type="number" min="0" step="0.01" data-idx="'+idx+'" data-field="precio" value="'+item.precio+'"></td>'
       + '<td class="col-sub mono" id="subtotal-'+idx+'">'+fmt(sub)+'</td>'
@@ -1299,19 +1306,23 @@
   }
 
   function viewClientes(){
+    var editing = ui.editingClienteId ? state.clientes.find(function(c){return c.id===ui.editingClienteId;}) : null;
     var rows = state.clientes.length ? state.clientes.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); }).map(function(c){
-      return '<tr><td>'+escapeHtml(c.nombre)+'</td>'
-        + '<td style="text-align:right;white-space:nowrap;"><button class="btn btn-sm btn-danger" data-action="eliminar-cliente" data-id="'+c.id+'">Eliminar</button></td></tr>';
-    }).join("") : '<tr><td colspan="2" class="empty">Aún no registras clientes.</td></tr>';
+      return '<div class="cliente-row">'
+        + '<div class="cliente-nombre">'+escapeHtml(c.nombre)+'</div>'
+        + '<div class="cliente-acciones"><button class="btn btn-sm" data-action="editar-cliente" data-id="'+c.id+'">Editar</button>'
+        + '<button class="btn btn-sm btn-danger" data-action="eliminar-cliente" data-id="'+c.id+'">Eliminar</button></div>'
+        + '</div>';
+    }).join("") : '<p class="empty">Aún no registras clientes.</p>';
 
     return ''
       + '<h1 class="section-title">Clientes</h1>'
       + '<p class="section-sub">Lista de clientes registrados. También se agregan solos al escribir un cliente nuevo en "Nueva venta".</p>'
       + '<div class="card" style="margin-bottom:18px;">'
-      + '  <div class="field"><label for="nc-nombre">Nombre del cliente / puesto</label><input id="nc-nombre" type="text" placeholder="Ej: Bodega San José"></div>'
-      + '  <div class="actions-row"><button class="btn btn-primary" data-action="agregar-cliente">+ Agregar cliente</button></div>'
+      + '  <div class="field"><label for="nc-nombre">Nombre del cliente / puesto</label><input id="nc-nombre" type="text" placeholder="Ej: Bodega San José" value="'+(editing?escapeHtml(editing.nombre):"")+'"></div>'
+      + '  <div class="actions-row">'+(editing?'<button class="btn" data-action="cancelar-edicion-cliente">Cancelar</button>':'')+'<button class="btn btn-primary" data-action="agregar-cliente" data-id="'+(editing?editing.id:"")+'">'+(editing?"Guardar cambios":"+ Agregar cliente")+'</button></div>'
       + '</div>'
-      + '<div class="items-wrap prod-table"><table><thead><tr><th>Nombre</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+      + '<div class="card" style="padding:6px 16px;">'+rows+'</div>';
   }
 
   // ---------- exportar CSV ----------
@@ -1825,12 +1836,22 @@
     else if(action==="agregar-cliente"){
       var ncNombre = document.getElementById("nc-nombre").value.trim();
       if(!ncNombre){ alert("Ingresa el nombre del cliente."); return; }
-      saveCliente({ nombre: ncNombre });
+      var ncId = t.getAttribute("data-id");
+      if(ncId){
+        var ce = state.clientes.find(function(c){return c.id===ncId;});
+        saveCliente(Object.assign({}, ce, { nombre: ncNombre }));
+      } else {
+        saveCliente({ nombre: ncNombre });
+      }
+      ui.editingClienteId = null;
       renderTab();
     }
+    else if(action==="editar-cliente"){ ui.editingClienteId = t.getAttribute("data-id"); renderTab(); }
+    else if(action==="cancelar-edicion-cliente"){ ui.editingClienteId = null; renderTab(); }
     else if(action==="eliminar-cliente"){
       if(confirm("¿Eliminar este cliente de la lista? Sus notas de venta ya registradas no se borran.")){
         deleteCliente(t.getAttribute("data-id"));
+        ui.editingClienteId = null;
         renderTab();
       }
     }
