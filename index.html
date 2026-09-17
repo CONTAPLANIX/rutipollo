@@ -228,6 +228,10 @@
   .ticket .doc-title{ text-align:center; font-size:12px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
   .ticket .corr-stamp{ text-align:center; color:var(--accent); font-size:20px; font-weight:600; transform:rotate(-2deg); margin:4px 0 10px; }
   .ticket .meta{ display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px; }
+  .ticket .ubic-block{ font-size:11px; margin:6px 0 2px; padding-top:4px; border-top:1px dashed var(--line); }
+  .ticket .ubic-block strong{ display:block; margin-bottom:2px; }
+  .ticket .ubic-block div{ color:var(--ink-soft); line-height:1.4; }
+  .ticket .ubic-block a{ display:inline-block; margin-top:3px; font-size:10.5px; color:var(--accent); }
   .ticket hr{ border:none; border-top:1px dashed var(--line); margin:10px 0; }
   .ticket .it{ display:flex; justify-content:space-between; font-size:12.5px; gap:8px; margin-bottom:5px; }
   .ticket .it .nm{ min-width:0; overflow-wrap:anywhere; }
@@ -1315,7 +1319,7 @@
   }
 
   function ticketHeightMm(venta, logoDataUrl){
-    var extra = (venta.notas ? 14 : 0) + (state.negocio.telefono ? 5 : 0) + (state.negocio.direccion ? 5 : 0) + (venta.ubicacion ? 20 : 0) + (estaPendiente(venta) ? 8 : 0) + (logoDataUrl ? 32 : 0);
+    var extra = (venta.notas ? 14 : 0) + (state.negocio.telefono ? 5 : 0) + (state.negocio.direccion ? 5 : 0) + (venta.ubicacion ? 20 : 0) + (logoDataUrl ? 32 : 0);
     return Math.max(62 + venta.items.length*9 + extra, 90);
   }
 
@@ -1337,39 +1341,37 @@
 
     row("Fecha", fechaDisplay(venta.fecha));
     row("Cliente", venta.cliente);
-    row("Tipo", venta.tipoPago==="credito" ? "Pendiente de pago" : "Contado");
+    if(venta.tipoPago!=="credito") row("Tipo", "Contado");
     if(estaPagado(venta)) row("Pago", venta.metodoPago==="banco"?"Banco":"Efectivo");
     if(venta.vendedor) row("Vendedor", venta.vendedor);
     if(venta.ubicacion){
-      doc.setFont("courier","normal"); doc.setFontSize(9); doc.text("Ubicación:", x, y); y+=4;
-      doc.setFontSize(7.5);
+      y+=1;
+      doc.setFont("courier","bold"); doc.setFontSize(8); doc.text("Ubicación:", x, y); y+=3.6;
+      doc.setFont("courier","normal"); doc.setFontSize(7.5);
       var dirTxt = direccionTexto || (venta.ubicacion.lat.toFixed(5)+", "+venta.ubicacion.lon.toFixed(5));
       var dirLines = doc.splitTextToSize(dirTxt, w);
       doc.text(dirLines, x, y);
-      y += dirLines.length*3.4 + 3;
+      y += dirLines.length*3.2 + 3;
     }
     rule();
 
     venta.items.forEach(function(it){
       var cod = codigoDeProducto(it.producto);
-      var nombreLinea = (cod ? cod+" " : "") + it.producto;
-      doc.setFont("courier","normal"); doc.setFontSize(9);
-      doc.text(nombreLinea.substring(0,28), x, y);
+      var qtyPrice = it.cantidad+"x"+Number(it.precio).toFixed(2);
+      var prefix = cod ? cod+" " : "";
+      var budget = 30 - prefix.length - qtyPrice.length - 1;
+      budget = Math.max(budget, 6);
+      var nombre = it.producto.length > budget ? it.producto.substring(0, budget-1)+"…" : it.producto;
+      var leftTxt = prefix + nombre + " " + qtyPrice;
+      doc.setFont("courier","normal"); doc.setFontSize(7.8);
+      doc.text(leftTxt, x, y);
+      doc.setFontSize(8.5);
       doc.text(fmt(it.cantidad*it.precio), x+w, y, {align:"right"});
-      y+=4.5;
-      doc.setFontSize(8); doc.setTextColor(120,120,120);
-      doc.text(it.cantidad+" x "+fmt(it.precio), x, y);
-      doc.setTextColor(0,0,0);
-      y+=4.5;
+      y+=5;
     });
     rule();
     row("TOTAL", fmt(venta.total));
 
-    if(estaPendiente(venta)){
-      y+=2; doc.setTextColor(190,40,30);
-      center("PENDIENTE DE PAGO", 11, true);
-      doc.setTextColor(0,0,0); y+=7;
-    }
     if(venta.notas){
       y+=2; doc.setFont("courier","normal"); doc.setFontSize(8);
       doc.text(doc.splitTextToSize(venta.notas, w), x, y); y+=10;
@@ -1433,16 +1435,14 @@
       + '      <div class="corr-stamp">N° '+String(venta.correlativo).padStart(6,"0")+'</div>'
       + '      <div class="meta"><span>Fecha</span><span>'+fechaDisplay(venta.fecha)+'</span></div>'
       + '      <div class="meta"><span>Cliente</span><span>'+escapeHtml(venta.cliente)+'</span></div>'
-      + '      <div class="meta"><span>Tipo</span><span>'+(venta.tipoPago==="credito"?"Pendiente de pago":"Contado")+'</span></div>'
+      + (venta.tipoPago!=="credito" ? '      <div class="meta"><span>Tipo</span><span>Contado</span></div>' : '')
       + (estaPagado(venta) ? '      <div class="meta"><span>Pago</span><span>'+(venta.metodoPago==="banco"?"Banco":"Efectivo")+'</span></div>' : '')
       + (venta.vendedor ? '      <div class="meta"><span>Vendedor</span><span>'+escapeHtml(venta.vendedor)+'</span></div>' : '')
-      + (venta.ubicacion ? '      <div class="meta" style="align-items:flex-start;"><span>Ubicación</span><span id="ticket-direccion" style="text-align:right;max-width:65%;">Buscando dirección…</span></div>'
-          + '      <div style="text-align:right;margin:-3px 0 2px;"><a href="'+mapsLink(venta.ubicacion)+'" target="_blank" rel="noopener" style="color:var(--accent);font-size:10.5px;">Ver en el mapa</a></div>' : '')
+      + (venta.ubicacion ? '      <div class="ubic-block"><strong>Ubicación:</strong><div id="ticket-direccion">Buscando dirección…</div><a href="'+mapsLink(venta.ubicacion)+'" target="_blank" rel="noopener">Ver en el mapa</a></div>' : '')
       + '      <hr>'
       + itemsHtml
       + '      <hr>'
       + '      <div class="total"><span>Total</span><span>'+fmt(venta.total)+'</span></div>'
-      + (estaPendiente(venta) ? '      <div class="corr-stamp" style="color:var(--danger);">PENDIENTE DE PAGO</div>' : '')
       + (venta.notas ? '<div class="foot">'+escapeHtml(venta.notas)+'</div>' : '')
       + '      <div class="foot">'+escapeHtml(state.negocio.pie||"Gracias por su compra")+'</div>'
       + '      <div class="legal">Documento interno — sin efectos tributarios (sin IGV)</div>'
