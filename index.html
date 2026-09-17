@@ -1377,8 +1377,7 @@
       doc.text(doc.splitTextToSize(venta.notas, w), x, y); y+=10;
     }
     y+=3; center(state.negocio.pie||"Gracias por su compra", 8, false); y+=5;
-    doc.setFont("courier","normal"); doc.setFontSize(7);
-    doc.text(doc.splitTextToSize("Documento interno - sin efectos tributarios (sin IGV)", w), x+w/2, y, {align:"center"});
+    center("Documento interno", 7, false);
   }
 
   function buildTicketPdfBlob(venta, logoDataUrl, direccionTexto){
@@ -1445,7 +1444,7 @@
       + '      <div class="total"><span>Total</span><span>'+fmt(venta.total)+'</span></div>'
       + (venta.notas ? '<div class="foot">'+escapeHtml(venta.notas)+'</div>' : '')
       + '      <div class="foot">'+escapeHtml(state.negocio.pie||"Gracias por su compra")+'</div>'
-      + '      <div class="legal">Documento interno — sin efectos tributarios (sin IGV)</div>'
+      + '      <div class="legal">Documento interno</div>'
       + '    </div>'
       + '    <div class="ticket-actions">'
       + '      <button class="btn" data-action="cerrar-overlay">Cerrar</button>'
