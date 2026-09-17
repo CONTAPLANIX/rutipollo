@@ -286,6 +286,7 @@
       <button class="tab-btn" data-tab="resumen"><span class="ic">📈</span><span>Resumen</span></button>
       <button class="tab-btn" data-tab="cobrar"><span class="ic">💰</span><span>Por cobrar</span></button>
       <button class="tab-btn" data-tab="productos"><span class="ic">📦</span><span>Productos</span></button>
+      <button class="tab-btn" data-tab="clientes"><span class="ic">👤</span><span>Clientes</span></button>
     </nav>
     <main class="main" id="main"></main>
   </div>
@@ -913,6 +914,7 @@
     else if(state.tab==="historial") main.innerHTML = viewHistorial();
     else if(state.tab==="resumen") main.innerHTML = viewResumen();
     else if(state.tab==="cobrar") main.innerHTML = viewPorCobrar();
+    else if(state.tab==="clientes") main.innerHTML = viewClientes();
     else main.innerHTML = viewProductos();
 
     document.querySelectorAll(".tab-btn").forEach(function(b){
@@ -1241,6 +1243,22 @@
       + '<div class="items-wrap prod-table"><table><thead><tr><th>Código</th><th>Producto</th><th>Precio</th><th>Unidad</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   }
 
+  function viewClientes(){
+    var rows = state.clientes.length ? state.clientes.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); }).map(function(c){
+      return '<tr><td>'+escapeHtml(c.nombre)+'</td>'
+        + '<td style="text-align:right;white-space:nowrap;"><button class="btn btn-sm btn-danger" data-action="eliminar-cliente" data-id="'+c.id+'">Eliminar</button></td></tr>';
+    }).join("") : '<tr><td colspan="2" class="empty">Aún no registras clientes.</td></tr>';
+
+    return ''
+      + '<h1 class="section-title">Clientes</h1>'
+      + '<p class="section-sub">Lista de clientes registrados. También se agregan solos al escribir un cliente nuevo en "Nueva venta".</p>'
+      + '<div class="card" style="margin-bottom:18px;">'
+      + '  <div class="field"><label for="nc-nombre">Nombre del cliente / puesto</label><input id="nc-nombre" type="text" placeholder="Ej: Bodega San José"></div>'
+      + '  <div class="actions-row"><button class="btn btn-primary" data-action="agregar-cliente">+ Agregar cliente</button></div>'
+      + '</div>'
+      + '<div class="items-wrap prod-table"><table><thead><tr><th>Nombre</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }
+
   // ---------- exportar CSV ----------
 
   function csvEscape(val){
@@ -1512,10 +1530,6 @@
       return '<div class="note-row"><div class="who">'+escapeHtml(u.nombre)+(currentUser&&currentUser.id===u.id?' <span class="pay-tag efectivo">tú</span>':'')+'</div>'
         + '<button class="btn btn-sm btn-danger" data-action="eliminar-usuario" data-id="'+u.id+'">Eliminar</button></div>';
     }).join("") : '<p class="empty" style="padding:8px 0;">Aún no hay usuarios.</p>';
-    var clienteRows = state.clientes.length ? state.clientes.slice().sort(function(a,b){return a.nombre.localeCompare(b.nombre);}).map(function(c){
-      return '<div class="note-row"><div class="who">'+escapeHtml(c.nombre)+(c.telefono?' <span class="corr">'+escapeHtml(c.telefono)+'</span>':'')+'</div>'
-        + '<button class="btn btn-sm btn-danger" data-action="eliminar-cliente" data-id="'+c.id+'">Eliminar</button></div>';
-    }).join("") : '<p class="empty" style="padding:8px 0;">Aún no registras clientes.</p>';
     root.innerHTML = ''
       + '<div class="overlay" data-action="cerrar-overlay">'
       + '  <div class="modal">'
@@ -1534,15 +1548,6 @@
       + '    </div>'
       + '    <div class="actions-row"><button class="btn btn-sm" data-action="agregar-usuario">+ Agregar usuario</button></div>'
       + '    <p class="section-sub" style="margin-top:10px;">El PIN identifica a cada persona, no es una contraseña de alta seguridad — cualquiera con el enlace y suficiente esfuerzo técnico podría verlo.</p>'
-      + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
-      + '    <h2 style="font-size:15px;">Clientes</h2>'
-      + '    <div style="margin-bottom:12px;">'+clienteRows+'</div>'
-      + '    <div class="row2">'
-      + '      <input id="nc-nombre" type="text" placeholder="Nombre del cliente / puesto">'
-      + '      <input id="nc-telefono" type="text" placeholder="Teléfono (opcional)">'
-      + '    </div>'
-      + '    <div class="actions-row"><button class="btn btn-sm" data-action="agregar-cliente">+ Agregar cliente</button></div>'
-      + '    <p class="section-sub" style="margin-top:10px;">También se agregan solos al escribir un cliente nuevo en "Nueva venta".</p>'
       + '  </div>'
       + '</div>';
   }
@@ -1764,15 +1769,14 @@
     }
     else if(action==="agregar-cliente"){
       var ncNombre = document.getElementById("nc-nombre").value.trim();
-      var ncTelefono = document.getElementById("nc-telefono").value.trim();
       if(!ncNombre){ alert("Ingresa el nombre del cliente."); return; }
-      saveCliente({ nombre: ncNombre, telefono: ncTelefono });
-      openAjustes();
+      saveCliente({ nombre: ncNombre });
+      renderTab();
     }
     else if(action==="eliminar-cliente"){
       if(confirm("¿Eliminar este cliente de la lista? Sus notas de venta ya registradas no se borran.")){
         deleteCliente(t.getAttribute("data-id"));
-        openAjustes();
+        renderTab();
       }
     }
     else if(action==="crear-usuario"){
