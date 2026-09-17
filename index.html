@@ -1678,7 +1678,8 @@
     center("NOTA DE VENTA", 9, false); y+=6;
     center("N° "+String(venta.correlativo).padStart(6,"0"), 14, true); y+=8;
 
-    row("Fecha", fechaDisplay(venta.fecha)+(venta.creadoEn?' · '+horaDisplay(venta.creadoEn):''));
+    row("Fecha", fechaDisplay(venta.fecha));
+    if(venta.creadoEn) row("Hora", horaDisplay(venta.creadoEn));
     row("Cliente", venta.cliente);
     if(venta.tipoPago!=="credito") row("Tipo", "Contado");
     if(estaPagado(venta)) row("Pago", metodoLabel(venta.metodoPago));
@@ -1787,7 +1788,8 @@
       + (state.negocio.direccion ? '<div class="biz-sub">'+escapeHtml(state.negocio.direccion)+'</div>' : '')
       + '      <div class="doc-title">Nota de venta</div>'
       + '      <div class="corr-stamp">N° '+String(venta.correlativo).padStart(6,"0")+'</div>'
-      + '      <div class="meta"><span>Fecha</span><span>'+fechaDisplay(venta.fecha)+(venta.creadoEn?' · '+horaDisplay(venta.creadoEn):'')+'</span></div>'
+      + '      <div class="meta"><span>Fecha</span><span>'+fechaDisplay(venta.fecha)+'</span></div>'
+      + (venta.creadoEn ? '      <div class="meta"><span>Hora</span><span>'+horaDisplay(venta.creadoEn)+'</span></div>' : '')
       + '      <div class="meta"><span>Cliente</span><span>'+escapeHtml(venta.cliente)+'</span></div>'
       + (venta.tipoPago!=="credito" ? '      <div class="meta"><span>Tipo</span><span>Contado</span></div>' : '')
       + (estaPagado(venta) ? '      <div class="meta"><span>Pago</span><span>'+metodoLabel(venta.metodoPago)+'</span></div>' : '')
