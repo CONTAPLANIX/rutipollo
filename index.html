@@ -17,6 +17,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
 <style>
   :root{
@@ -799,37 +800,51 @@
         state.db = db;
         state.dbReady = true;
 
-        db.collection("ventas").orderBy("creadoEn","desc").limit(1000).onSnapshot(function(snap){
-          mergeRemoteVentas(snap.docChanges());
-          if(state.tab==="historial" || state.tab==="resumen") renderTab();
-          refreshSyncBadge();
-        }, function(){ refreshSyncBadge(); });
-
-        db.collection("productos").orderBy("nombre","asc").limit(500).onSnapshot(function(snap){
-          mergeRemoteProductos(snap.docChanges());
-          if(state.tab==="productos" || state.tab==="nueva") renderTab();
-          refreshSyncBadge();
-        }, function(){});
-
         db.collection("usuarios").orderBy("nombre","asc").limit(200).onSnapshot(function(snap){
           mergeRemoteUsuarios(snap.docChanges());
           checkGate();
         }, function(){});
 
-        db.collection("clientes").orderBy("nombre","asc").limit(1000).onSnapshot(function(snap){
-          mergeRemoteClientes(snap.docChanges());
-          if(state.tab==="nueva") renderTab();
-        }, function(){});
+        var datosPrivadosConectados = false;
+        function conectarDatosPrivados(){
+          if(datosPrivadosConectados) return;
+          datosPrivadosConectados = true;
 
-        db.doc("meta/negocio").onSnapshot(function(snap){
-          if(snap.exists && !state.negocio._dirty){
-            state.negocio = Object.assign({}, state.negocio, snap.data());
-            applyNegocioHeader();
-          }
-        }, function(){});
+          db.collection("ventas").orderBy("creadoEn","desc").limit(1000).onSnapshot(function(snap){
+            mergeRemoteVentas(snap.docChanges());
+            if(state.tab==="historial" || state.tab==="resumen") renderTab();
+            refreshSyncBadge();
+          }, function(){ refreshSyncBadge(); });
+
+          db.collection("productos").orderBy("nombre","asc").limit(500).onSnapshot(function(snap){
+            mergeRemoteProductos(snap.docChanges());
+            if(state.tab==="productos" || state.tab==="nueva") renderTab();
+            refreshSyncBadge();
+          }, function(){});
+
+          db.collection("clientes").orderBy("nombre","asc").limit(1000).onSnapshot(function(snap){
+            mergeRemoteClientes(snap.docChanges());
+            if(state.tab==="nueva") renderTab();
+          }, function(){});
+
+          db.doc("meta/negocio").onSnapshot(function(snap){
+            if(snap.exists && !state.negocio._dirty){
+              state.negocio = Object.assign({}, state.negocio, snap.data());
+              applyNegocioHeader();
+            }
+          }, function(){});
+
+          refreshSyncBadge();
+          syncPending();
+        }
+
+        if(firebase.auth){
+          firebase.auth().onAuthStateChanged(function(user){
+            if(user) conectarDatosPrivados();
+          });
+        }
 
         refreshSyncBadge();
-        syncPending();
       });
   }
 
@@ -988,9 +1003,20 @@
     if(root.querySelector(".gate")) root.innerHTML = "";
   }
 
+  function firebaseSignIn(email, password){
+    if(!window.firebase || !firebase.auth) return Promise.reject(new Error("Firebase no disponible"));
+    return firebase.auth().signInWithEmailAndPassword(email, password);
+  }
+  function firebaseSignOut(){
+    if(window.firebase && firebase.auth){
+      try{ firebase.auth().signOut(); }catch(e){}
+    }
+  }
+
   function logout(){
     currentUser = null;
     try{ localStorage.removeItem(LS.currentUser); }catch(e){}
+    firebaseSignOut();
     checkGate();
   }
 
@@ -1040,6 +1066,24 @@
         + '</div>';
       var pinEl = document.getElementById("gate-pin");
       if(pinEl) pinEl.focus();
+      return;
+    }
+
+    if(ui.gateMode === "password"){
+      var up = state.usuarios.find(function(x){ return x.id===ui.gateSelectedId; });
+      root.innerHTML = '<div class="gate">'
+        + logo
+        + '<h1 class="section-title" style="margin:0;">Contraseña de '+escapeHtml(up?up.nombre:"")+'</h1>'
+        + '<p class="gate-note">Tu contraseña real, distinta del PIN — protege la información del negocio.</p>'
+        + '<div class="gate-form">'
+        + '  <input id="gate-password" type="password" autocomplete="current-password" placeholder="Contraseña">'
+        + '  <div class="pin-error" id="gate-error">'+escapeHtml(ui.gateError)+'</div>'
+        + '  <button class="btn btn-primary" data-action="confirmar-password">Entrar</button>'
+        + '  <button class="btn btn-sm" data-action="gate-volver">← Elegir otro usuario</button>'
+        + '</div>'
+        + '</div>';
+      var passEl = document.getElementById("gate-password");
+      if(passEl) passEl.focus();
       return;
     }
 
@@ -2172,8 +2216,27 @@
     else if(action==="confirmar-pin"){
       var pinVal = document.getElementById("gate-pin").value.trim();
       var su = state.usuarios.find(function(x){ return x.id===ui.gateSelectedId; });
-      if(su && su.pin === pinVal){ loginAs(su); }
+      if(su && su.pin === pinVal){ ui.gateError = ""; ui.gateMode = "password"; renderGate(); }
       else { ui.gateError = "PIN incorrecto."; renderGate(); }
+    }
+    else if(action==="confirmar-password"){
+      var sp = state.usuarios.find(function(x){ return x.id===ui.gateSelectedId; });
+      var passVal = document.getElementById("gate-password").value;
+      if(!sp || !sp.authEmail){
+        ui.gateError = "Este usuario no tiene contraseña configurada. Pide a un administrador que la cree.";
+        renderGate();
+        return;
+      }
+      if(!passVal){ ui.gateError = "Ingresa tu contraseña."; renderGate(); return; }
+      ui.gateError = "Verificando…";
+      renderGate();
+      firebaseSignIn(sp.authEmail, passVal).then(function(){
+        ui.gateError = "";
+        loginAs(sp);
+      }).catch(function(){
+        ui.gateError = "Contraseña incorrecta.";
+        renderGate();
+      });
     }
   });
 
@@ -2181,6 +2244,7 @@
     if(e.key !== "Enter") return;
     var id = e.target && e.target.id;
     if(id==="gate-pin"){ e.preventDefault(); document.querySelector('[data-action="confirmar-pin"]').click(); }
+    else if(id==="gate-password"){ e.preventDefault(); document.querySelector('[data-action="confirmar-password"]').click(); }
     else if(id==="gate-pin2" || id==="gate-pin1" || id==="gate-nombre"){ e.preventDefault(); document.querySelector('[data-action="crear-usuario"]').click(); }
     else if(id==="nu-pin" || id==="nu-nombre"){ e.preventDefault(); document.querySelector('[data-action="agregar-usuario"]').click(); }
   });
