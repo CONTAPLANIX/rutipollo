@@ -911,8 +911,10 @@
     checkGate();
   }
 
+  function esAdmin(u){ return !!(u && u.rol==="admin"); }
+
   function loginAs(u){
-    currentUser = { id:u.id, nombre:u.nombre };
+    currentUser = { id:u.id, nombre:u.nombre, rol:u.rol||"vendedor" };
     try{ localStorage.setItem(LS.currentUser, JSON.stringify(currentUser)); }catch(e){}
     closeGate();
     updateUserBadge();
@@ -964,7 +966,7 @@
       + '<div class="user-grid">' + state.usuarios.map(function(u){
           return '<button class="user-chip" data-action="gate-elegir" data-id="'+u.id+'" data-initial="'+escapeHtml((u.nombre||"?").trim().charAt(0).toUpperCase())+'">'+escapeHtml(u.nombre)+'</button>';
         }).join("") + '</div>'
-      + '<button class="btn btn-sm" data-action="gate-nuevo-usuario">+ Agregar otro usuario</button>'
+      + (state.usuarios.length ? '' : '<button class="btn btn-sm" data-action="gate-nuevo-usuario">+ Agregar otro usuario</button>')
       + '</div>';
   }
 
@@ -1664,9 +1666,10 @@
   function openAjustes(){
     var root = document.getElementById("overlay-root");
     var n = state.negocio;
+    var soyAdmin = esAdmin(currentUser);
     var userRows = state.usuarios.length ? state.usuarios.map(function(u){
-      return '<div class="note-row"><div class="who">'+escapeHtml(u.nombre)+(currentUser&&currentUser.id===u.id?' <span class="pay-tag efectivo">tú</span>':'')+'</div>'
-        + '<button class="btn btn-sm btn-danger" data-action="eliminar-usuario" data-id="'+u.id+'">Eliminar</button></div>';
+      return '<div class="note-row"><div class="who">'+escapeHtml(u.nombre)+(u.rol==="admin"?' <span class="pay-tag banco">admin</span>':'')+(currentUser&&currentUser.id===u.id?' <span class="pay-tag efectivo">tú</span>':'')+'</div>'
+        + (soyAdmin ? '<button class="btn btn-sm btn-danger" data-action="eliminar-usuario" data-id="'+u.id+'">Eliminar</button>' : '')+'</div>';
     }).join("") : '<p class="empty" style="padding:8px 0;">Aún no hay usuarios.</p>';
     root.innerHTML = ''
       + '<div class="overlay" data-action="cerrar-overlay">'
@@ -1680,12 +1683,14 @@
       + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
       + '    <h2 style="font-size:15px;">Usuarios que pueden entrar</h2>'
       + '    <div style="margin-bottom:12px;">'+userRows+'</div>'
-      + '    <div class="row2">'
-      + '      <input id="nu-nombre" type="text" placeholder="Nombre">'
-      + '      <input id="nu-pin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="PIN (4 dígitos)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">'
-      + '    </div>'
-      + '    <div class="actions-row"><button class="btn btn-sm" data-action="agregar-usuario">+ Agregar usuario</button></div>'
-      + '    <p class="section-sub" style="margin-top:10px;">El PIN identifica a cada persona, no es una contraseña de alta seguridad — cualquiera con el enlace y suficiente esfuerzo técnico podría verlo.</p>'
+      + (soyAdmin ? ''
+        + '    <div class="row2">'
+        + '      <input id="nu-nombre" type="text" placeholder="Nombre">'
+        + '      <input id="nu-pin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="PIN (4 dígitos)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">'
+        + '    </div>'
+        + '    <div class="actions-row"><button class="btn btn-sm" data-action="agregar-usuario">+ Agregar usuario</button></div>'
+        + '    <p class="section-sub" style="margin-top:10px;">El PIN identifica a cada persona, no es una contraseña de alta seguridad — cualquiera con el enlace y suficiente esfuerzo técnico podría verlo.</p>'
+        : '    <p class="section-sub" style="margin-top:4px;">Solo un administrador puede agregar o quitar usuarios.</p>')
       + '  </div>'
       + '</div>';
   }
@@ -1893,14 +1898,16 @@
       if(confirm("¿Cambiar de usuario?")) logout();
     }
     else if(action==="agregar-usuario"){
+      if(!esAdmin(currentUser)) return;
       var unombre = document.getElementById("nu-nombre").value.trim();
       var upin = document.getElementById("nu-pin").value.trim();
       if(!unombre){ alert("Ingresa el nombre del usuario."); return; }
       if(!/^\d{4}$/.test(upin)){ alert("El PIN debe tener exactamente 4 dígitos."); return; }
-      saveUsuario({ nombre:unombre, pin:upin });
+      saveUsuario({ nombre:unombre, pin:upin, rol:"vendedor" });
       openAjustes();
     }
     else if(action==="eliminar-usuario"){
+      if(!esAdmin(currentUser)) return;
       if(confirm("¿Eliminar este usuario? Ya no podrá entrar con su PIN.")){
         deleteUsuario(t.getAttribute("data-id"));
         openAjustes();
