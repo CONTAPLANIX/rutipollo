@@ -363,7 +363,7 @@
   };
 
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
-  var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: 0, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
+  var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: 0, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
     gateMode: "crear", gateSelectedId: null, gateError: "", soloMisVentas: false };
 
   var LS = { ventas:"lr_ventas_v1", productos:"lr_productos_v1", clientes:"lr_clientes_v1", negocio:"lr_negocio_v1", pending:"lr_pending_deletes_v1", usuarios:"lr_usuarios_v1", currentUser:"lr_current_user_v1", lastBackup:"lr_last_backup_v1" };
@@ -1198,6 +1198,77 @@
     }
 
     var ventasMes = ventasYear.filter(function(v){ return v.mes===ui.resumenMonth; });
+
+    var vistaToggle = '<div class="pay-toggle" style="max-width:360px;margin-bottom:18px;">'
+      + '<button class="pay-opt'+(ui.resumenVista==="dias"?" on":"")+'" data-action="resumen-vista" data-vista="dias">Por día</button>'
+      + '<button class="pay-opt'+(ui.resumenVista==="semanas"?" on":"")+'" data-action="resumen-vista" data-vista="semanas">Por semana</button>'
+      + '<button class="pay-opt'+(ui.resumenVista==="undia"?" on":"")+'" data-action="resumen-vista" data-vista="undia">Un día</button>'
+      + '</div>';
+
+    if(ui.resumenVista === "undia"){
+      var diaSel = ui.resumenDiaSel || todayISO();
+      var ventasDia = state.ventas.filter(function(v){ return v.fecha===diaSel; })
+        .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; })
+        .sort(function(a,b){ return (a.creadoEn||0)-(b.creadoEn||0); });
+      var totalDia = ventasDia.reduce(function(s,v){return s+v.total;},0);
+      var efvoDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago!=="banco";}).reduce(function(s,v){return s+v.total;},0);
+      var bcoDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
+      var cobrarDia = ventasDia.filter(estaPendiente).reduce(function(s,v){return s+v.total;},0);
+      var filaDia = ventasDia.map(function(v){
+        var payTag = estaPendiente(v)
+          ? '<span class="pay-tag pendiente">Pendiente</span>'
+          : '<span class="pay-tag '+(v.metodoPago==="banco"?"banco":"efectivo")+'">'+(v.metodoPago==="banco"?"Banco":"Efvo.")+'</span>';
+        return '<div class="note-row">'
+          + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+'</div>'
+          + '<div style="display:flex;align-items:center;gap:10px;">'+payTag+'<span class="amt">'+fmt(v.total)+'</span>'
+          + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
+          + '</div>';
+      }).join("");
+
+      return ''
+        + '<h1 class="section-title">Resumen de ingresos</h1>'
+        + '<p class="section-sub">Detalle de un día en particular.</p>'
+        + toolbar
+        + vistaToggle
+        + '<div class="field" style="max-width:220px;"><label for="resumen-dia-picker">Elegir día</label><input id="resumen-dia-picker" type="date" value="'+diaSel+'"></div>'
+        + (!ventasDia.length ? '<p class="empty">Sin ventas registradas el '+fechaDisplay(diaSel)+'.</p>' : ''
+          + '<div class="stat-row">'
+          + '  <div class="stat hi"><div class="label">Total del día</div><div class="value">'+fmt(totalDia)+'</div></div>'
+          + '  <div class="stat"><div class="label">Notas emitidas</div><div class="value">'+ventasDia.length+'</div></div>'
+          + '  <div class="stat"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(efvoDia)+'</div></div>'
+          + '  <div class="stat"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(bcoDia)+'</div></div>'
+          + (cobrarDia>0 ? '  <div class="stat"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(cobrarDia)+'</div></div>' : '')
+          + '</div>'
+          + '<div class="card" style="padding:6px 16px;">'+filaDia+'</div>');
+    }
+
+    if(ui.resumenVista === "semanas"){
+      var diasEnMesW = new Date(ui.resumenYear, ui.resumenMonth, 0).getDate();
+      var semanas = [];
+      for(var d0=1; d0<=diasEnMesW; d0+=7){ semanas.push({ desde:d0, hasta:Math.min(d0+6, diasEnMesW), total:0, notas:0 }); }
+      ventasMes.forEach(function(v){
+        var s = semanas.find(function(s){ return v.dia>=s.desde && v.dia<=s.hasta; });
+        if(s){ s.total+=v.total; s.notas+=1; }
+      });
+      var totalMesW = semanas.reduce(function(s,w){return s+w.total;},0);
+      var notasMesW = semanas.reduce(function(s,w){return s+w.notas;},0);
+      var svgSemanas = barChartSvg(semanas.map(function(w){return w.desde+"-"+w.hasta;}), semanas.map(function(w){return w.total;}), "Ingresos por semana en "+monthLabel);
+      var rowsSemanas = semanas.map(function(w,i){
+        return '<tr><td>Semana '+(i+1)+' ('+w.desde+'-'+w.hasta+' '+MESES_ABR[ui.resumenMonth-1]+')</td><td class="mono">'+w.notas+'</td><td class="mono">'+fmt(w.total)+'</td></tr>';
+      }).join("");
+
+      return ''
+        + '<h1 class="section-title">Resumen de ingresos</h1>'
+        + '<p class="section-sub">Detalle semanal de '+monthLabel+' '+ui.resumenYear+'.</p>'
+        + toolbar
+        + vistaToggle
+        + (notasMesW===0 ? '<p class="empty">Sin ventas registradas en '+monthLabel+' '+ui.resumenYear+'.</p>' : ''
+          + '<div class="stat-row"><div class="stat hi"><div class="label">Total del mes</div><div class="value">'+fmt(totalMesW)+'</div></div>'
+          + '<div class="stat"><div class="label">Notas emitidas</div><div class="value">'+notasMesW+'</div></div></div>'
+          + '<div class="card chart-card">'+svgSemanas+'</div>'
+          + '<div class="items-wrap" style="margin-top:16px;"><table><thead><tr><th>Semana</th><th>Notas</th><th>Total</th></tr></thead><tbody>'+rowsSemanas+'</tbody></table></div>');
+    }
+
     var diasEnMes = new Date(ui.resumenYear, ui.resumenMonth, 0).getDate();
     var dayTotals = new Array(diasEnMes).fill(0);
     var dayCounts = new Array(diasEnMes).fill(0);
@@ -1219,6 +1290,7 @@
       + '<h1 class="section-title">Resumen de ingresos</h1>'
       + '<p class="section-sub">Detalle diario de '+monthLabel+' '+ui.resumenYear+'.</p>'
       + toolbar
+      + vistaToggle
       + (notasMes===0 ? '<p class="empty">Sin ventas registradas en '+monthLabel+' '+ui.resumenYear+'.</p>' : ''
         + '<div class="stat-row">'
         + '  <div class="stat hi"><div class="label">Total del mes</div><div class="value">'+fmt(totalMes)+'</div></div>'
@@ -1816,6 +1888,7 @@
     else if(action==="resumen-year-next"){ ui.resumenYear++; renderTab(); }
     else if(action==="resumen-month-prev"){ ui.resumenMonth = ui.resumenMonth===0 ? 12 : ui.resumenMonth-1; renderTab(); }
     else if(action==="resumen-month-next"){ ui.resumenMonth = ui.resumenMonth===12 ? 0 : ui.resumenMonth+1; renderTab(); }
+    else if(action==="resumen-vista"){ ui.resumenVista = t.getAttribute("data-vista"); renderTab(); }
     else if(action==="cambiar-usuario"){
       if(confirm("¿Cambiar de usuario?")) logout();
     }
@@ -1940,6 +2013,7 @@
       }
     }
     else if(t.id==="hist-year"){ ui.historialYear = Number(t.value); ui.selectMode=false; ui.selected={}; renderTab(); }
+    else if(t.id==="resumen-dia-picker"){ ui.resumenDiaSel = t.value; renderTab(); }
     else if(t.classList && t.classList.contains("item-input") && t.getAttribute("data-field")==="producto"){
       var idx = Number(t.getAttribute("data-idx"));
       var match = state.productos.find(function(p){ return p.nombre.trim().toLowerCase()===t.value.trim().toLowerCase(); });
