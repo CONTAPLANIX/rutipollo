@@ -1,4 +1,4 @@
-var CACHE_NAME = "rutipollo-v1";
+var CACHE_NAME = "rutipollo-v2";
 var PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -47,7 +47,7 @@ self.addEventListener("fetch", function(event){
 
   if(req.mode === "navigate"){
     event.respondWith(
-      fetch(req).then(function(res){
+      fetch(req, { cache: "no-store" }).then(function(res){
         var copy = res.clone();
         caches.open(CACHE_NAME).then(function(c){ c.put("./index.html", copy); });
         return res;
