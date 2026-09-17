@@ -179,13 +179,19 @@
   .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   @media (max-width:520px){ .row2{ grid-template-columns:1fr; } }
 
-  .pay-toggle{ display:flex; gap:8px; }
-  .pay-opt{ flex:1; text-align:center; border:1px solid var(--line); background:var(--paper); border-radius:var(--r-sm); padding:10px 10px; font-size:14px; font-weight:500; color:var(--ink-soft); }
+  .pay-toggle{ display:flex; gap:8px; flex-wrap:wrap; }
+  .pay-opt{ flex:1 1 100px; text-align:center; border:1px solid var(--line); background:var(--paper); border-radius:var(--r-sm); padding:10px 10px; font-size:14px; font-weight:500; color:var(--ink-soft); }
   .pay-opt:hover{ border-color:var(--line-strong); }
   .pay-opt.on{ background:var(--accent); border-color:var(--accent-strong); color:var(--accent-ink); box-shadow:0 4px 12px rgba(247,98,4,.28); }
+  .pay-opt.yape{ border-color:#a276c4; color:#742284; }
+  .pay-opt.yape.on{ background:#742284; border-color:#5c1a69; color:#fff; box-shadow:0 4px 12px rgba(116,34,132,.35); }
+  .pay-opt.plin{ border-color:#7fe0d8; color:#049a91; }
+  .pay-opt.plin.on{ background:#00c1b6; border-color:#049a91; color:#06322f; box-shadow:0 4px 12px rgba(0,193,182,.35); }
   .pay-tag{ font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; padding:2.5px 8px; border-radius:20px; border:1px solid var(--line-strong); color:var(--ink-soft); white-space:nowrap; font-weight:600; }
   .pay-tag.efectivo{ background:var(--paper-alt); }
   .pay-tag.banco{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .pay-tag.yape{ background:#742284; color:#fff; border-color:#742284; }
+  .pay-tag.plin{ background:#00c1b6; color:#06322f; border-color:#00c1b6; }
   .pay-tag.pendiente{ background:transparent; color:var(--danger); border-color:var(--danger); font-weight:600; }
 
   .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--line-strong); background:var(--paper-raised); color:var(--ink); padding:10px 18px; border-radius:var(--r-sm); font-size:14px; font-weight:500; box-shadow:var(--shadow-sm); }
@@ -194,6 +200,10 @@
   .btn-primary:hover{ background:var(--accent-strong); box-shadow:0 6px 18px rgba(247,98,4,.4); }
   .btn-danger{ color:var(--danger); border-color:var(--danger); background:transparent; box-shadow:none; }
   .btn-danger:hover{ background:rgba(194,59,44,.08); }
+  .btn.yape{ border-color:#742284; color:#742284; }
+  .btn.yape:hover{ background:rgba(116,34,132,.1); }
+  .btn.plin{ border-color:#049a91; color:#049a91; }
+  .btn.plin:hover{ background:rgba(0,193,182,.12); }
   .btn-ghost{ border-color:transparent; background:transparent; padding:6px 8px; box-shadow:none; }
   .btn-ghost:hover{ background:rgba(9,45,88,.06); }
   .btn-sm{ padding:6px 12px; font-size:12.5px; }
@@ -364,7 +374,8 @@
 
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
   var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: 0, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
-    gateMode: "crear", gateSelectedId: null, gateError: "", soloMisVentas: false };
+    gateMode: "crear", gateSelectedId: null, gateError: "", soloMisVentas: false,
+    cobrarVista: "pendientes", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
 
   var LS = { ventas:"lr_ventas_v1", productos:"lr_productos_v1", clientes:"lr_clientes_v1", negocio:"lr_negocio_v1", pending:"lr_pending_deletes_v1", usuarios:"lr_usuarios_v1", currentUser:"lr_current_user_v1", lastBackup:"lr_last_backup_v1" };
   var pendingDeletes = { ventas:[], productos:[], clientes:[], usuarios:[] };
@@ -403,6 +414,16 @@
   function fechaDisplay(f){
     var p = parseFecha(f);
     return p.dia + " " + MESES_ABR[p.mes-1] + " " + p.anio;
+  }
+
+  function metodoLabel(m){
+    return m==="banco" ? "Banco" : m==="yape" ? "Yape" : m==="plin" ? "Plin" : "Efectivo";
+  }
+  function metodoAbrev(m){
+    return m==="banco" ? "Banco" : m==="yape" ? "Yape" : m==="plin" ? "Plin" : "Efvo.";
+  }
+  function metodoTagClass(m){
+    return m==="banco" ? "banco" : m==="yape" ? "yape" : m==="plin" ? "plin" : "efectivo";
   }
 
   function horaDisplay(creadoEn){
@@ -1030,6 +1051,8 @@
           : '  <div class="field" style="margin-top:14px;"><label>Forma de pago</label><div class="pay-toggle">'
             + '    <button type="button" class="pay-opt'+(draft.metodoPago==="efectivo"?" on":"")+'" data-action="pago" data-val="efectivo">Efectivo</button>'
             + '    <button type="button" class="pay-opt'+(draft.metodoPago==="banco"?" on":"")+'" data-action="pago" data-val="banco">Banco</button>'
+            + '    <button type="button" class="pay-opt yape'+(draft.metodoPago==="yape"?" on":"")+'" data-action="pago" data-val="yape">Yape</button>'
+            + '    <button type="button" class="pay-opt plin'+(draft.metodoPago==="plin"?" on":"")+'" data-action="pago" data-val="plin">Plin</button>'
             + '  </div></div>')
       + '  <div class="field"><label for="f-notas">Notas (opcional)</label><textarea id="f-notas" rows="2" placeholder="Referencias de entrega, etc.">'+escapeHtml(draft.notas)+'</textarea></div>'
       + '  <div class="total-row">Total <span class="amt mono" id="draft-total">'+fmt(draftTotal())+'</span></div>'
@@ -1085,7 +1108,7 @@
           var rows = dl.map(function(v){
             var payTag = estaPendiente(v)
               ? '<span class="pay-tag pendiente">Pendiente</span>'
-              : '<span class="pay-tag '+(v.metodoPago==="banco"?"banco":"efectivo")+'">'+(v.metodoPago==="banco"?"Banco":"Efvo.")+'</span>';
+              : '<span class="pay-tag '+metodoTagClass(v.metodoPago)+'">'+metodoAbrev(v.metodoPago)+'</span>';
             var check = ui.selectMode ? '<input type="checkbox" class="sel-check" data-id="'+v.id+'"'+(ui.selected[v.id]?" checked":"")+'>' : '';
             return '<div class="note-row">'
               + check
@@ -1175,8 +1198,10 @@
       var promedio = mesesConVentas ? totalYear/mesesConVentas : 0;
       var maxIdx = monthTotals.indexOf(Math.max.apply(null, monthTotals));
       var mejorMes = totalYear>0 ? MESES[maxIdx] : "—";
-      var totalEfectivo = ventasYear.filter(function(v){return estaPagado(v) && v.metodoPago!=="banco";}).reduce(function(s,v){return s+v.total;},0);
+      var totalEfectivo = ventasYear.filter(function(v){return estaPagado(v) && metodoTagClass(v.metodoPago)==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
       var totalBanco = ventasYear.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
+      var totalYape = ventasYear.filter(function(v){return estaPagado(v) && v.metodoPago==="yape";}).reduce(function(s,v){return s+v.total;},0);
+      var totalPlin = ventasYear.filter(function(v){return estaPagado(v) && v.metodoPago==="plin";}).reduce(function(s,v){return s+v.total;},0);
       var totalPorCobrar = ventasYear.filter(estaPendiente).reduce(function(s,v){return s+v.total;},0);
       var svg = barChartSvg(MESES_ABR, monthTotals, "Ingresos por mes");
       var rowsTable = MESES.map(function(m,i){
@@ -1193,6 +1218,8 @@
         + '  <div class="stat"><div class="label">Mejor mes</div><div class="value" style="font-size:18px;">'+mejorMes+'</div></div>'
         + '  <div class="stat"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(totalEfectivo)+'</div></div>'
         + '  <div class="stat"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(totalBanco)+'</div></div>'
+        + (totalYape>0 ? '  <div class="stat"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(totalYape)+'</div></div>' : '')
+        + (totalPlin>0 ? '  <div class="stat"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(totalPlin)+'</div></div>' : '')
         + (totalPorCobrar>0 ? '  <div class="stat"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(totalPorCobrar)+'</div></div>' : '')
         + '</div>'
         + '<div class="card chart-card">'+svg+'</div>'
@@ -1213,13 +1240,15 @@
         .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; })
         .sort(function(a,b){ return (a.creadoEn||0)-(b.creadoEn||0); });
       var totalDia = ventasDia.reduce(function(s,v){return s+v.total;},0);
-      var efvoDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago!=="banco";}).reduce(function(s,v){return s+v.total;},0);
+      var efvoDia = ventasDia.filter(function(v){return estaPagado(v) && metodoTagClass(v.metodoPago)==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
       var bcoDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
+      var yapeDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago==="yape";}).reduce(function(s,v){return s+v.total;},0);
+      var plinDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago==="plin";}).reduce(function(s,v){return s+v.total;},0);
       var cobrarDia = ventasDia.filter(estaPendiente).reduce(function(s,v){return s+v.total;},0);
       var filaDia = ventasDia.map(function(v){
         var payTag = estaPendiente(v)
           ? '<span class="pay-tag pendiente">Pendiente</span>'
-          : '<span class="pay-tag '+(v.metodoPago==="banco"?"banco":"efectivo")+'">'+(v.metodoPago==="banco"?"Banco":"Efvo.")+'</span>';
+          : '<span class="pay-tag '+metodoTagClass(v.metodoPago)+'">'+metodoAbrev(v.metodoPago)+'</span>';
         return '<div class="note-row">'
           + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+'</div>'
           + '<div style="display:flex;align-items:center;gap:10px;">'+payTag+'<span class="amt">'+fmt(v.total)+'</span>'
@@ -1239,6 +1268,8 @@
           + '  <div class="stat"><div class="label">Notas emitidas</div><div class="value">'+ventasDia.length+'</div></div>'
           + '  <div class="stat"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(efvoDia)+'</div></div>'
           + '  <div class="stat"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(bcoDia)+'</div></div>'
+          + (yapeDia>0 ? '  <div class="stat"><div class="label" style="color:#742284;">Yape</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeDia)+'</div></div>' : '')
+          + (plinDia>0 ? '  <div class="stat"><div class="label" style="color:#049a91;">Plin</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinDia)+'</div></div>' : '')
           + (cobrarDia>0 ? '  <div class="stat"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(cobrarDia)+'</div></div>' : '')
           + '</div>'
           + '<div class="card" style="padding:6px 16px;">'+filaDia+'</div>');
@@ -1278,8 +1309,10 @@
     var totalMes = dayTotals.reduce(function(a,b){return a+b;},0);
     var notasMes = ventasMes.length;
     var promedioDia = notasMes ? totalMes/dayTotals.filter(function(t){return t>0;}).length : 0;
-    var efectivoMes = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago!=="banco";}).reduce(function(s,v){return s+v.total;},0);
+    var efectivoMes = ventasMes.filter(function(v){return estaPagado(v) && metodoTagClass(v.metodoPago)==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
     var bancoMes = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
+    var yapeMes = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="yape";}).reduce(function(s,v){return s+v.total;},0);
+    var plinMes = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="plin";}).reduce(function(s,v){return s+v.total;},0);
     var porCobrarMes = ventasMes.filter(estaPendiente).reduce(function(s,v){return s+v.total;},0);
     var dayLabels = dayTotals.map(function(_,i){ return String(i+1); });
     var svgDia = barChartSvg(dayLabels, dayTotals, "Ingresos por día en "+monthLabel);
@@ -1300,13 +1333,79 @@
         + '  <div class="stat"><div class="label">Promedio por día activo</div><div class="value" style="font-size:19px;">'+fmt(promedioDia)+'</div></div>'
         + '  <div class="stat"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(efectivoMes)+'</div></div>'
         + '  <div class="stat"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(bancoMes)+'</div></div>'
+        + (yapeMes>0 ? '  <div class="stat"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeMes)+'</div></div>' : '')
+        + (plinMes>0 ? '  <div class="stat"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinMes)+'</div></div>' : '')
         + (porCobrarMes>0 ? '  <div class="stat"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(porCobrarMes)+'</div></div>' : '')
         + '</div>'
         + '<div class="card chart-card">'+svgDia+'</div>'
         + '<div class="items-wrap" style="margin-top:16px;"><table><thead><tr><th>Día</th><th>Notas</th><th>Total</th></tr></thead><tbody>'+rowsDias+'</tbody></table></div>');
   }
 
+  function botonesMarcarPagado(v){
+    return '<button class="btn btn-sm" data-action="marcar-pagado" data-id="'+v.id+'" data-metodo="efectivo">✓ Efvo.</button>'
+      + '<button class="btn btn-sm" data-action="marcar-pagado" data-id="'+v.id+'" data-metodo="banco">✓ Banco</button>'
+      + '<button class="btn btn-sm yape" data-action="marcar-pagado" data-id="'+v.id+'" data-metodo="yape">✓ Yape</button>'
+      + '<button class="btn btn-sm plin" data-action="marcar-pagado" data-id="'+v.id+'" data-metodo="plin">✓ Plin</button>';
+  }
+
   function viewPorCobrar(){
+    var vistaToggle = '<div class="pay-toggle" style="max-width:420px;margin-bottom:18px;">'
+      + '<button class="pay-opt'+(ui.cobrarVista==="pendientes"?" on":"")+'" data-action="cobrar-vista" data-vista="pendientes">Pendientes</button>'
+      + '<button class="pay-opt'+(ui.cobrarVista==="historial"?" on":"")+'" data-action="cobrar-vista" data-vista="historial">Historial de cobros</button>'
+      + '</div>';
+
+    if(ui.cobrarVista === "historial"){
+      var yearStepper = '<div class="stepper">'
+        + '<button data-action="cobrar-year-prev" aria-label="Año anterior">‹</button>'
+        + '<span class="stepper-label">'+ui.cobrarYear+'</span>'
+        + '<button data-action="cobrar-year-next" aria-label="Año siguiente">›</button>'
+        + '</div>';
+      var monthStepper = '<div class="stepper">'
+        + '<button data-action="cobrar-month-prev" aria-label="Mes anterior">‹</button>'
+        + '<span class="stepper-label">'+MESES[ui.cobrarMonth-1]+'</span>'
+        + '<button data-action="cobrar-month-next" aria-label="Mes siguiente">›</button>'
+        + '</div>';
+
+      var cobros = state.ventas.filter(function(v){ return v.tipoPago==="credito" && v.pagado && v.fechaPago; })
+        .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; })
+        .filter(function(v){ var fp = parseFecha(v.fechaPago); return fp.anio===ui.cobrarYear && fp.mes===ui.cobrarMonth; });
+
+      var byDia = {};
+      cobros.forEach(function(v){ (byDia[v.fechaPago]=byDia[v.fechaPago]||[]).push(v); });
+      var dias = Object.keys(byDia).sort(function(a,b){ return b<a?-1:1; });
+      var totalCobrado = cobros.reduce(function(s,v){return s+v.total;},0);
+      var porMetodo = {};
+      cobros.forEach(function(v){ porMetodo[v.metodoPago] = (porMetodo[v.metodoPago]||0)+v.total; });
+
+      var body = !dias.length ? '<p class="empty">Sin cobros de pendientes registrados en '+MESES[ui.cobrarMonth-1]+' '+ui.cobrarYear+'.</p>' : dias.map(function(d){
+        var lista = byDia[d].slice().sort(function(a,b){ return (a.creadoEn||0)-(b.creadoEn||0); });
+        var dTotal = lista.reduce(function(s,v){return s+v.total;},0);
+        var rows = lista.map(function(v){
+          return '<div class="note-row">'
+            + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+' <span style="color:var(--ink-soft);">(vendido '+fechaDisplay(v.fecha)+')</span></div>'
+            + '<div style="display:flex;align-items:center;gap:8px;"><span class="pay-tag '+metodoTagClass(v.metodoPago)+'">'+metodoLabel(v.metodoPago)+'</span><span class="amt">'+fmt(v.total)+'</span>'
+            + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
+            + '</div>';
+        }).join("");
+        return '<details class="month" open><summary>'+fechaDisplay(d)+' <span class="chev">▾</span> <span class="month-total">'+fmt(dTotal)+'</span></summary>'
+          + '<div class="day-block">'+rows+'</div></details>';
+      }).join("");
+
+      return ''
+        + '<h1 class="section-title">Historial de cobros</h1>'
+        + '<p class="section-sub">Notas que estuvieron pendientes de pago y ya se cobraron, por mes y fecha.</p>'
+        + '<div class="toolbar">'+yearStepper+monthStepper+soloMiosToggleHtml()+'</div>'
+        + vistaToggle
+        + (cobros.length ? '<div class="stat-row">'
+          + '  <div class="stat hi"><div class="label">Total cobrado</div><div class="value">'+fmt(totalCobrado)+'</div></div>'
+          + (porMetodo.efectivo ? '  <div class="stat"><div class="label">Efectivo</div><div class="value" style="font-size:19px;">'+fmt(porMetodo.efectivo)+'</div></div>' : '')
+          + (porMetodo.banco ? '  <div class="stat"><div class="label">Banco</div><div class="value" style="font-size:19px;">'+fmt(porMetodo.banco)+'</div></div>' : '')
+          + (porMetodo.yape ? '  <div class="stat"><div class="label" style="color:#742284;">Yape</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(porMetodo.yape)+'</div></div>' : '')
+          + (porMetodo.plin ? '  <div class="stat"><div class="label" style="color:#049a91;">Plin</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(porMetodo.plin)+'</div></div>' : '')
+          + '</div>' : '')
+        + body;
+    }
+
     var pendientes = state.ventas.filter(estaPendiente)
       .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; });
     var totalPendiente = pendientes.reduce(function(s,v){return s+v.total;},0);
@@ -1315,6 +1414,7 @@
       return ''
         + '<h1 class="section-title">Por cobrar</h1>'
         + '<p class="section-sub">Clientes con ventas pendientes de pago.</p>'
+        + vistaToggle
         + (soloMiosToggleHtml() ? '<div class="toolbar">'+soloMiosToggleHtml()+'</div>' : '')
         + '<p class="empty">No hay cuentas pendientes de cobro. 🎉</p>';
     }
@@ -1331,9 +1431,8 @@
       var rows = cl.notas.slice().sort(function(a,b){ return (a.creadoEn||0)-(b.creadoEn||0); }).map(function(v){
         return '<div class="note-row">'
           + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+fechaDisplay(v.fecha)+'</div>'
-          + '<div style="display:flex;align-items:center;gap:8px;"><span class="amt">'+fmt(v.total)+'</span>'
-          + '<button class="btn btn-sm" data-action="marcar-pagado" data-id="'+v.id+'" data-metodo="efectivo">✓ Efvo.</button>'
-          + '<button class="btn btn-sm" data-action="marcar-pagado" data-id="'+v.id+'" data-metodo="banco">✓ Banco</button>'
+          + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="amt">'+fmt(v.total)+'</span>'
+          + botonesMarcarPagado(v)
           + '</div></div>';
       }).join("");
       return '<details class="month" open><summary>'+escapeHtml(cl.cliente)+' <span class="chev">▾</span> <span class="month-total" style="color:var(--danger);">'+fmt(cl.total)+'</span></summary>'
@@ -1342,7 +1441,8 @@
 
     return ''
       + '<h1 class="section-title">Por cobrar</h1>'
-      + '<p class="section-sub">Clientes con ventas pendientes de pago. Toca "Efvo." o "Banco" al recibir el pago.</p>'
+      + '<p class="section-sub">Clientes con ventas pendientes de pago. Toca el método al recibir el pago.</p>'
+      + vistaToggle
       + '<div class="toolbar">'+soloMiosToggleHtml()+'<span class="mono" style="color:var(--danger);font-weight:600;">Total por cobrar: '+fmt(totalPendiente)+'</span></div>'
       + body;
   }
@@ -1416,7 +1516,7 @@
           v.correlativo, v.fecha, v.cliente, codigoDeProducto(it.producto), it.producto, it.cantidad, it.precio,
           (Number(it.cantidad)*Number(it.precio)).toFixed(2), Number(v.total).toFixed(2),
           v.tipoPago==="credito"?"Pendiente de pago":"Contado", estaPendiente(v)?"Pendiente":"Pagado",
-          v.metodoPago==="banco"?"Banco":(v.metodoPago==="efectivo"?"Efectivo":""), v.vendedor||"",
+          v.metodoPago ? metodoLabel(v.metodoPago) : "", v.vendedor||"",
           v.ubicacion ? mapsLink(v.ubicacion) : "", v.notas||""
         ]);
       });
@@ -1500,7 +1600,7 @@
     row("Fecha", fechaDisplay(venta.fecha)+(venta.creadoEn?' · '+horaDisplay(venta.creadoEn):''));
     row("Cliente", venta.cliente);
     if(venta.tipoPago!=="credito") row("Tipo", "Contado");
-    if(estaPagado(venta)) row("Pago", venta.metodoPago==="banco"?"Banco":"Efectivo");
+    if(estaPagado(venta)) row("Pago", metodoLabel(venta.metodoPago));
     if(venta.vendedor) row("Vendedor", venta.vendedor);
     if(venta.ubicacion){
       y+=1;
@@ -1593,7 +1693,7 @@
       + '      <div class="meta"><span>Fecha</span><span>'+fechaDisplay(venta.fecha)+(venta.creadoEn?' · '+horaDisplay(venta.creadoEn):'')+'</span></div>'
       + '      <div class="meta"><span>Cliente</span><span>'+escapeHtml(venta.cliente)+'</span></div>'
       + (venta.tipoPago!=="credito" ? '      <div class="meta"><span>Tipo</span><span>Contado</span></div>' : '')
-      + (estaPagado(venta) ? '      <div class="meta"><span>Pago</span><span>'+(venta.metodoPago==="banco"?"Banco":"Efectivo")+'</span></div>' : '')
+      + (estaPagado(venta) ? '      <div class="meta"><span>Pago</span><span>'+metodoLabel(venta.metodoPago)+'</span></div>' : '')
       + (venta.vendedor ? '      <div class="meta"><span>Vendedor</span><span>'+escapeHtml(venta.vendedor)+'</span></div>' : '')
       + (venta.ubicacion ? '      <div class="ubic-block"><strong>Ubicación:</strong><div id="ticket-direccion">Buscando dirección…</div><a href="'+mapsLink(venta.ubicacion)+'" target="_blank" rel="noopener">Ver en el mapa</a></div>' : '')
       + '      <hr>'
@@ -1855,7 +1955,7 @@
       var vid = t.getAttribute("data-id");
       var metodo = t.getAttribute("data-metodo");
       var vv = state.ventas.find(function(x){ return x.id===vid; });
-      if(vv && confirm("¿Marcar la nota N° "+String(vv.correlativo).padStart(6,"0")+" ("+fmt(vv.total)+") como pagada en "+(metodo==="banco"?"Banco":"Efectivo")+"?")){
+      if(vv && confirm("¿Marcar la nota N° "+String(vv.correlativo).padStart(6,"0")+" ("+fmt(vv.total)+") como pagada por "+metodoLabel(metodo)+"?")){
         vv.pagado = true;
         vv.metodoPago = metodo;
         vv.fechaPago = todayISO();
@@ -1894,6 +1994,11 @@
     else if(action==="resumen-month-prev"){ ui.resumenMonth = ui.resumenMonth===0 ? 12 : ui.resumenMonth-1; renderTab(); }
     else if(action==="resumen-month-next"){ ui.resumenMonth = ui.resumenMonth===12 ? 0 : ui.resumenMonth+1; renderTab(); }
     else if(action==="resumen-vista"){ ui.resumenVista = t.getAttribute("data-vista"); renderTab(); }
+    else if(action==="cobrar-vista"){ ui.cobrarVista = t.getAttribute("data-vista"); renderTab(); }
+    else if(action==="cobrar-year-prev"){ ui.cobrarYear--; renderTab(); }
+    else if(action==="cobrar-year-next"){ ui.cobrarYear++; renderTab(); }
+    else if(action==="cobrar-month-prev"){ ui.cobrarMonth = ui.cobrarMonth===1 ? 12 : ui.cobrarMonth-1; if(ui.cobrarMonth===12) ui.cobrarYear--; renderTab(); }
+    else if(action==="cobrar-month-next"){ ui.cobrarMonth = ui.cobrarMonth===12 ? 1 : ui.cobrarMonth+1; if(ui.cobrarMonth===1) ui.cobrarYear++; renderTab(); }
     else if(action==="cambiar-usuario"){
       if(confirm("¿Cambiar de usuario?")) logout();
     }
