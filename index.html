@@ -355,6 +355,15 @@
     return p.dia + " " + MESES_ABR[p.mes-1] + " " + p.anio;
   }
 
+  function horaDisplay(creadoEn){
+    if(!creadoEn) return "";
+    var d = new Date(creadoEn);
+    var h = d.getHours(), m = d.getMinutes();
+    var ampm = h>=12 ? "p.m." : "a.m.";
+    var h12 = h % 12; if(h12===0) h12 = 12;
+    return h12 + ":" + String(m).padStart(2,"0") + " " + ampm;
+  }
+
   // Notas de antes de esta función no tienen tipoPago/pagado guardado — se tratan
   // como "contado, ya pagado" (su comportamiento de siempre), sin migrar datos.
   function estaPagado(v){ return v.pagado !== false; }
@@ -1357,7 +1366,7 @@
     center("NOTA DE VENTA", 9, false); y+=6;
     center("N° "+String(venta.correlativo).padStart(6,"0"), 14, true); y+=8;
 
-    row("Fecha", fechaDisplay(venta.fecha));
+    row("Fecha", fechaDisplay(venta.fecha)+(venta.creadoEn?' · '+horaDisplay(venta.creadoEn):''));
     row("Cliente", venta.cliente);
     if(venta.tipoPago!=="credito") row("Tipo", "Contado");
     if(estaPagado(venta)) row("Pago", venta.metodoPago==="banco"?"Banco":"Efectivo");
@@ -1450,7 +1459,7 @@
       + (state.negocio.direccion ? '<div class="biz-sub">'+escapeHtml(state.negocio.direccion)+'</div>' : '')
       + '      <div class="doc-title">Nota de venta</div>'
       + '      <div class="corr-stamp">N° '+String(venta.correlativo).padStart(6,"0")+'</div>'
-      + '      <div class="meta"><span>Fecha</span><span>'+fechaDisplay(venta.fecha)+'</span></div>'
+      + '      <div class="meta"><span>Fecha</span><span>'+fechaDisplay(venta.fecha)+(venta.creadoEn?' · '+horaDisplay(venta.creadoEn):'')+'</span></div>'
       + '      <div class="meta"><span>Cliente</span><span>'+escapeHtml(venta.cliente)+'</span></div>'
       + (venta.tipoPago!=="credito" ? '      <div class="meta"><span>Tipo</span><span>Contado</span></div>' : '')
       + (estaPagado(venta) ? '      <div class="meta"><span>Pago</span><span>'+(venta.metodoPago==="banco"?"Banco":"Efectivo")+'</span></div>' : '')
