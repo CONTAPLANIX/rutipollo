@@ -302,6 +302,10 @@
   .ticket .legal{ text-align:center; font-size:9.5px; color:var(--ink-soft); margin-top:6px; }
   .ticket-actions{ display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap; }
 
+  .internal-note{ background:var(--paper-alt); border:1px dashed var(--line-strong); border-radius:var(--r-sm); padding:10px 14px; margin-top:14px; font-size:12.5px; line-height:1.5; }
+  .internal-note .label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:600; margin-bottom:4px; }
+  .internal-note .txt{ color:var(--ink); }
+
   .gate{ position:fixed; inset:0; background:radial-gradient(circle at 50% 0%, var(--paper-alt), var(--paper) 60%); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 20px; gap:22px; text-align:center; animation:fadeIn .2s var(--ease); }
   .gate-logo{ width:92px; height:92px; object-fit:contain; filter:drop-shadow(0 10px 20px rgba(9,45,88,.18)); }
   .gate-note{ color:var(--ink-soft); font-size:12.5px; max-width:320px; line-height:1.5; }
@@ -322,6 +326,7 @@
     #overlay-root, #overlay-root *{ visibility:visible; }
     #overlay-root{ position:absolute; inset:0; background:#fff !important; padding:0; }
     .ticket-actions{ display:none !important; }
+    .internal-note{ display:none !important; }
     .ticket{ border:none; max-width:100%; }
   }
 </style>
@@ -436,6 +441,13 @@
         : '<span class="pay-tag pendiente">Pendiente</span>';
     }
     return '<span class="pay-tag '+metodoTagClass(v.metodoPago)+'">'+metodoAbrev(v.metodoPago)+'</span>';
+  }
+  function notaRowHtml(v){
+    return '<div class="note-row">'
+      + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+'</div>'
+      + '<div style="display:flex;align-items:center;gap:10px;">'+payTagHtml(v)+'<span class="amt">'+fmt(v.total)+'</span>'
+      + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
+      + '</div>';
   }
 
   function horaDisplay(creadoEn){
@@ -1324,7 +1336,8 @@
     if(ui.resumenVista === "semanas"){
       var diasEnMesW = new Date(ui.resumenYear, ui.resumenMonth, 0).getDate();
       var semanas = [];
-      for(var d0=1; d0<=diasEnMesW; d0+=7){ semanas.push({ desde:d0, hasta:Math.min(d0+6, diasEnMesW), total:0, notas:0 }); }
+      var numSem = 1;
+      for(var d0=1; d0<=diasEnMesW; d0+=7){ semanas.push({ num:numSem++, desde:d0, hasta:Math.min(d0+6, diasEnMesW), total:0, notas:0 }); }
       ventasMes.forEach(function(v){
         var s = semanas.find(function(s){ return v.dia>=s.desde && v.dia<=s.hasta; });
         if(s){ s.total+=v.total; s.notas+=1; }
@@ -1332,8 +1345,10 @@
       var totalMesW = semanas.reduce(function(s,w){return s+w.total;},0);
       var notasMesW = semanas.reduce(function(s,w){return s+w.notas;},0);
       var svgSemanas = barChartSvg(semanas.map(function(w){return w.desde+"-"+w.hasta;}), semanas.map(function(w){return w.total;}), "Ingresos por semana en "+monthLabel);
-      var rowsSemanas = semanas.map(function(w,i){
-        return '<tr><td>Semana '+(i+1)+' ('+w.desde+'-'+w.hasta+' '+MESES_ABR[ui.resumenMonth-1]+')</td><td class="mono">'+w.notas+'</td><td class="mono">'+fmt(w.total)+'</td></tr>';
+      var bodySemanas = semanas.filter(function(w){return w.notas>0;}).map(function(w){
+        var lista = ventasMes.filter(function(v){return v.dia>=w.desde && v.dia<=w.hasta;}).sort(function(a,b){return (a.creadoEn||0)-(b.creadoEn||0);});
+        var rows = lista.map(notaRowHtml).join("");
+        return '<details class="month" open><summary>Semana '+w.num+' ('+w.desde+'-'+w.hasta+' '+MESES_ABR[ui.resumenMonth-1]+') <span class="chev">▾</span> <span class="month-total">'+fmt(w.total)+'</span></summary><div class="day-block">'+rows+'</div></details>';
       }).join("");
 
       return ''
@@ -1345,7 +1360,7 @@
           + '<div class="stat-row"><div class="stat hi"><div class="label">Total del mes</div><div class="value">'+fmt(totalMesW)+'</div></div>'
           + '<div class="stat"><div class="label">Notas emitidas</div><div class="value">'+notasMesW+'</div></div></div>'
           + '<div class="card chart-card">'+svgSemanas+'</div>'
-          + '<div class="items-wrap" style="margin-top:16px;"><table><thead><tr><th>Semana</th><th>Notas</th><th>Total</th></tr></thead><tbody>'+rowsSemanas+'</tbody></table></div>');
+          + bodySemanas);
     }
 
     var diasEnMes = new Date(ui.resumenYear, ui.resumenMonth, 0).getDate();
@@ -1362,9 +1377,13 @@
     var porCobrarMes = ventasMes.filter(estaPendiente).reduce(function(s,v){return s+saldoPendiente(v);},0);
     var dayLabels = dayTotals.map(function(_,i){ return String(i+1); });
     var svgDia = barChartSvg(dayLabels, dayTotals, "Ingresos por día en "+monthLabel);
-    var rowsDias = dayTotals.map(function(t,i){
-      if(dayCounts[i]===0) return "";
-      return '<tr><td>'+(i+1)+' '+MESES_ABR[ui.resumenMonth-1]+'</td><td class="mono">'+dayCounts[i]+'</td><td class="mono">'+fmt(t)+'</td></tr>';
+    var byDiaMes = {};
+    ventasMes.forEach(function(v){ (byDiaMes[v.dia]=byDiaMes[v.dia]||[]).push(v); });
+    var bodyDias = Object.keys(byDiaMes).map(Number).sort(function(a,b){return b-a;}).map(function(d){
+      var lista = byDiaMes[d].slice().sort(function(a,b){return (a.creadoEn||0)-(b.creadoEn||0);});
+      var dTotal = lista.reduce(function(s,v){return s+v.total;},0);
+      var rows = lista.map(notaRowHtml).join("");
+      return '<details class="month" open><summary>'+d+' '+MESES_ABR[ui.resumenMonth-1]+' <span class="chev">▾</span> <span class="month-total">'+fmt(dTotal)+'</span></summary><div class="day-block">'+rows+'</div></details>';
     }).join("");
 
     return ''
@@ -1384,7 +1403,7 @@
         + (porCobrarMes>0 ? '  <div class="stat"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(porCobrarMes)+'</div></div>' : '')
         + '</div>'
         + '<div class="card chart-card">'+svgDia+'</div>'
-        + '<div class="items-wrap" style="margin-top:16px;"><table><thead><tr><th>Día</th><th>Notas</th><th>Total</th></tr></thead><tbody>'+rowsDias+'</tbody></table></div>');
+        + bodyDias);
   }
 
   function filaAbono(v){
@@ -1639,18 +1658,18 @@
   }
 
   function ticketHeightMm(venta, logoDataUrl){
-    var extra = (venta.notas ? 14 : 0) + (state.negocio.telefono ? 5 : 0) + (state.negocio.direccion ? 5 : 0) + (venta.ubicacion ? 20 : 0) + (logoDataUrl ? 32 : 0);
+    var extra = (venta.notas ? 14 : 0) + (state.negocio.telefono ? 5 : 0) + (state.negocio.direccion ? 5 : 0) + (venta.ubicacion ? 20 : 0) + (logoDataUrl ? 25 : 0);
     return Math.max(62 + venta.items.length*9 + extra, 90);
   }
 
   function drawTicketOnDoc(doc, venta, logoDataUrl, direccionTexto){
-    var x = 5, w = 70, y = 10;
+    var x = 5, w = 70, y = 5;
     function center(text, size, bold){ doc.setFont("courier", bold?"bold":"normal"); doc.setFontSize(size); doc.text(String(text), x+w/2, y, {align:"center", maxWidth:w}); }
     function row(label, val){ doc.setFont("courier","normal"); doc.setFontSize(9); doc.text(label, x, y); doc.text(String(val), x+w, y, {align:"right", maxWidth:w-25}); y+=5; }
     function rule(){ doc.setFont("courier","normal"); doc.setFontSize(9); doc.text("-".repeat(38), x, y); y+=5; }
 
     if(logoDataUrl){
-      try{ doc.addImage(logoDataUrl, "PNG", x+w/2-16, y, 32, 32); y += 36; }catch(e){}
+      try{ doc.addImage(logoDataUrl, "PNG", x+w/2-13, y, 26, 26); y += 29; }catch(e){}
     } else {
       center(state.negocio.nombre||"Rico Pollo Dissur", 13, true); y+=6;
     }
@@ -1735,6 +1754,22 @@
 
   // ---------- ticket & settings overlays ----------
 
+  function estadoPagoHtml(venta){
+    var texto;
+    if(venta.tipoPago==="credito"){
+      if(venta.pagado){
+        texto = '<strong>Pagado completo</strong> — '+fmt(venta.total)+' por '+metodoLabel(venta.metodoPago)+'.';
+      } else if(esPagoParcial(venta)){
+        texto = 'Le han pagado <strong>'+fmt(montoAbonado(venta))+'</strong> de '+fmt(venta.total)+'. Debe un saldo de <strong style="color:var(--danger);">'+fmt(saldoPendiente(venta))+'</strong>.';
+      } else {
+        texto = 'Aún no ha pagado nada. Debe el total: <strong style="color:var(--danger);">'+fmt(venta.total)+'</strong>.';
+      }
+    } else {
+      texto = '<strong>Pagado completo</strong> — '+fmt(venta.total)+' por '+metodoLabel(venta.metodoPago)+' (al contado).';
+    }
+    return '<div class="internal-note"><div class="label">Estado de pago <span style="font-weight:400;">(solo tú lo ves aquí, no sale en el PDF ni al imprimir)</span></div><div class="txt">'+texto+'</div></div>';
+  }
+
   function openTicket(venta){
     currentTicketVenta = venta;
     var root = document.getElementById("overlay-root");
@@ -1766,6 +1801,7 @@
       + '      <div class="foot">'+escapeHtml(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!")+'</div>'
       + '      <div class="legal">Documento interno</div>'
       + '    </div>'
+      + estadoPagoHtml(venta)
       + '    <div class="ticket-actions">'
       + '      <button class="btn" data-action="cerrar-overlay">Cerrar</button>'
       + '      <button class="btn btn-primary" data-action="descargar-pdf-ticket">⬇ Descargar PDF</button>'
