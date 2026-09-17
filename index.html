@@ -1812,6 +1812,7 @@
       var unombre = document.getElementById("nu-nombre").value.trim();
       var upin = document.getElementById("nu-pin").value.trim();
       if(!unombre){ alert("Ingresa el nombre del usuario."); return; }
+      if(state.usuarios.some(function(u){ return u.nombre.trim().toLowerCase()===unombre.toLowerCase(); })){ alert("Ya existe un usuario con ese nombre."); return; }
       if(!/^\d{4}$/.test(upin)){ alert("El PIN debe tener exactamente 4 dígitos."); return; }
       saveUsuario({ nombre:unombre, pin:upin });
       openAjustes();
@@ -1839,6 +1840,8 @@
       var cPin1 = document.getElementById("gate-pin1").value.trim();
       var cPin2 = document.getElementById("gate-pin2").value.trim();
       if(!cNombre){ ui.gateError = "Ingresa tu nombre."; renderGate(); return; }
+      var yaExiste = state.usuarios.some(function(u){ return u.nombre.trim().toLowerCase()===cNombre.toLowerCase(); });
+      if(yaExiste){ ui.gateError = "Ya existe un usuario '"+cNombre+"'. Vuelve y tócalo en la lista en vez de crear uno nuevo."; renderGate(); return; }
       if(!/^\d{4}$/.test(cPin1)){ ui.gateError = "El PIN debe tener 4 dígitos."; renderGate(); return; }
       if(cPin1 !== cPin2){ ui.gateError = "Los PIN no coinciden."; renderGate(); return; }
       var nu = saveUsuario({ nombre:cNombre, pin:cPin1 });
