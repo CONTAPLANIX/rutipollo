@@ -306,7 +306,7 @@
     productos: [],
     clientes: [],
     usuarios: [],
-    negocio: { nombre: "Rico Pollo Dissur", telefono: "", pie: "Gracias por su compra", logo: "assets/logo.png" },
+    negocio: { nombre: "Rico Pollo Dissur", telefono: "", pie: "Gracias por su Compra. ¡Hasta la próxima entrega!", logo: "assets/logo.png" },
     db: null,
     dbReady: false
   };
@@ -1376,7 +1376,7 @@
       y+=2; doc.setFont("courier","normal"); doc.setFontSize(8);
       doc.text(doc.splitTextToSize(venta.notas, w), x, y); y+=10;
     }
-    y+=3; center(state.negocio.pie||"Gracias por su compra", 8, false); y+=5;
+    y+=3; center(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!", 8, false); y+=5;
     center("Documento interno", 7, false);
   }
 
@@ -1443,7 +1443,7 @@
       + '      <hr>'
       + '      <div class="total"><span>Total</span><span>'+fmt(venta.total)+'</span></div>'
       + (venta.notas ? '<div class="foot">'+escapeHtml(venta.notas)+'</div>' : '')
-      + '      <div class="foot">'+escapeHtml(state.negocio.pie||"Gracias por su compra")+'</div>'
+      + '      <div class="foot">'+escapeHtml(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!")+'</div>'
       + '      <div class="legal">Documento interno</div>'
       + '    </div>'
       + '    <div class="ticket-actions">'
@@ -1666,7 +1666,7 @@
         nombre: document.getElementById("a-nombre").value.trim() || "Rico Pollo Dissur",
         telefono: document.getElementById("a-telefono").value.trim(),
         direccion: document.getElementById("a-direccion").value.trim(),
-        pie: document.getElementById("a-pie").value.trim() || "Gracias por su compra"
+        pie: document.getElementById("a-pie").value.trim() || "Gracias por su Compra. ¡Hasta la próxima entrega!"
       });
       saveNegocio(data);
       closeOverlay();
