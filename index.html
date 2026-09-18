@@ -1804,32 +1804,44 @@
       doc.text(dirLines, x, y);
       y += dirLines.length*3.2 + 3;
     }
-    rule();
+    y += 1;
+    var cb = [x, x+11, x+38, x+48, x+59, x+w];
+    var headerH = 5.2, rowH = 5.4;
+    var tableTop = y - 3.6;
+    var tableH = headerH + venta.items.length*rowH;
 
-    var colCod = x, colProd = x+9, colUnd = x+46, colPU = x+60, colTot = x+w;
+    doc.setLineWidth(0.18);
+    doc.rect(x, tableTop, w, tableH);
+    for(var ci=1; ci<cb.length-1; ci++){ doc.line(cb[ci], tableTop, cb[ci], tableTop+tableH); }
+    doc.line(x, tableTop+headerH, x+w, tableTop+headerH);
+
     doc.setFont("courier","bold"); doc.setFontSize(6.3);
-    doc.text("CÓD", colCod, y);
-    doc.text("PRODUCTO", colProd, y);
-    doc.text("UND", colUnd, y, {align:"right"});
-    doc.text("P.UNIT", colPU, y, {align:"right"});
-    doc.text("TOTAL", colTot, y, {align:"right"});
-    y += 3;
-    doc.setFont("courier","normal");
-    doc.text("-".repeat(38), x, y); y += 3.6;
+    doc.text("CÓD", cb[0]+1.2, y);
+    doc.text("PRODUCTO", cb[1]+1.2, y);
+    doc.text("UND", cb[3]-1.2, y, {align:"right"});
+    doc.text("P.UNIT", cb[4]-1.2, y, {align:"right"});
+    doc.text("TOTAL", cb[5]-1.2, y, {align:"right"});
+    y += headerH;
 
-    venta.items.forEach(function(it){
+    doc.setFont("courier","normal");
+    venta.items.forEach(function(it, idx){
       var cod = codigoDeProducto(it.producto) || "-";
-      var budget = 16;
+      var budget = 15;
       var nombre = it.producto.length > budget ? it.producto.substring(0, budget-1)+"…" : it.producto;
-      doc.setFontSize(7.2);
-      doc.text(cod, colCod, y);
-      doc.text(nombre, colProd, y);
-      doc.text(String(it.cantidad), colUnd, y, {align:"right"});
-      doc.text(Number(it.precio).toFixed(2), colPU, y, {align:"right"});
-      doc.text(Number(it.cantidad*it.precio).toFixed(2), colTot, y, {align:"right"});
-      y += 4.6;
+      var ty = y - 1.7;
+      doc.setFontSize(7);
+      doc.text(cod, cb[0]+1.2, ty);
+      doc.text(nombre, cb[1]+1.2, ty);
+      doc.text(String(it.cantidad), cb[3]-1.2, ty, {align:"right"});
+      doc.text(Number(it.precio).toFixed(2), cb[4]-1.2, ty, {align:"right"});
+      doc.text(Number(it.cantidad*it.precio).toFixed(2), cb[5]-1.2, ty, {align:"right"});
+      y += rowH;
+      if(idx < venta.items.length-1){
+        var lineY = tableTop+headerH+(idx+1)*rowH;
+        doc.line(x, lineY, x+w, lineY);
+      }
     });
-    rule();
+    y = tableTop + tableH + 5;
     row("TOTAL", fmt(venta.total));
 
     if(venta.notas){
