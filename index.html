@@ -1769,8 +1769,16 @@
   }
 
   function ticketHeightMm(venta, logoDataUrl){
-    var extra = (venta.notas ? 14 : 0) + (state.negocio.telefono ? 5 : 0) + (state.negocio.direccion ? 5 : 0) + (venta.ubicacion ? 20 : 0) + (logoDataUrl ? 25 : 0);
-    return Math.max(62 + venta.items.length*9 + extra, 90);
+    var filas = 2; // Fecha + Cliente
+    if(venta.creadoEn) filas += 1; // Hora
+    if(venta.tipoPago !== "credito") filas += 1; // Tipo
+    if(estaPagado(venta)) filas += 1; // Pago
+    if(venta.vendedor) filas += 1; // Vendedor
+    var base = 40 + filas*5.2;
+    var extra = (venta.notas ? 16 : 0) + (state.negocio.telefono ? 5.5 : 0) + (state.negocio.direccion ? 5.5 : 0) + (venta.ubicacion ? 26 : 0) + (logoDataUrl ? 30 : 8);
+    var tabla = 14 + venta.items.length*5.6;
+    var pie = 22;
+    return Math.max(base + extra + tabla + pie, 90);
   }
 
   function drawTicketOnDoc(doc, venta, logoDataUrl, direccionTexto){
