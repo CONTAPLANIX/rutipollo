@@ -172,7 +172,7 @@
   .field input::placeholder, .field textarea::placeholder{ color:var(--ink-soft); opacity:.65; }
 
   .ac-wrap{ position:relative; }
-  .ac-list{ position:absolute; left:0; right:0; top:100%; margin-top:4px; background:var(--paper-raised); border:1px solid var(--line-strong); border-radius:var(--r-md); max-height:190px; overflow-y:auto; z-index:40; box-shadow:var(--shadow-lg); animation:popIn .14s var(--ease); }
+  .ac-list{ position:absolute; left:0; right:0; top:100%; margin-top:4px; background:var(--paper-raised); border:1px solid var(--line-strong); border-radius:var(--r-md); max-height:260px; overflow-y:auto; -webkit-overflow-scrolling:touch; z-index:40; box-shadow:var(--shadow-lg); animation:popIn .14s var(--ease); }
   .ac-item{ padding:10px 13px; font-size:14px; border-bottom:1px dashed var(--line); transition:background-color .12s var(--ease); }
   .ac-item:last-child{ border-bottom:none; }
   .ac-item:hover, .ac-item:active{ background:var(--paper-alt); }
@@ -610,8 +610,9 @@
     var list = Object.keys(byName).map(function(n){ return byName[n]; });
     var q = (query||"").trim().toLowerCase();
     if(q) list = list.filter(function(p){ return p.nombre.toLowerCase().indexOf(q)>-1 || (p.codigo && p.codigo.toLowerCase().indexOf(q)>-1); });
-    list.sort(function(a,b){ return (counts[b.nombre]||0)-(counts[a.nombre]||0) || a.nombre.localeCompare(b.nombre); });
-    return list.slice(0,8);
+    if(q) list.sort(function(a,b){ return (counts[b.nombre]||0)-(counts[a.nombre]||0) || a.nombre.localeCompare(b.nombre); });
+    else list.sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+    return list.slice(0, q ? 8 : 200);
   }
 
   function showClienteSuggestions(query){
