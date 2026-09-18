@@ -1806,19 +1806,28 @@
     }
     rule();
 
+    var colCod = x, colProd = x+9, colUnd = x+46, colPU = x+60, colTot = x+w;
+    doc.setFont("courier","bold"); doc.setFontSize(6.3);
+    doc.text("CÓD", colCod, y);
+    doc.text("PRODUCTO", colProd, y);
+    doc.text("UND", colUnd, y, {align:"right"});
+    doc.text("P.UNIT", colPU, y, {align:"right"});
+    doc.text("TOTAL", colTot, y, {align:"right"});
+    y += 3;
+    doc.setFont("courier","normal");
+    doc.text("-".repeat(38), x, y); y += 3.6;
+
     venta.items.forEach(function(it){
-      var cod = codigoDeProducto(it.producto);
-      var qtyPrice = it.cantidad+"x"+Number(it.precio).toFixed(2);
-      var prefix = cod ? cod+" " : "";
-      var budget = 30 - prefix.length - qtyPrice.length - 1;
-      budget = Math.max(budget, 6);
+      var cod = codigoDeProducto(it.producto) || "-";
+      var budget = 16;
       var nombre = it.producto.length > budget ? it.producto.substring(0, budget-1)+"…" : it.producto;
-      var leftTxt = prefix + nombre + " " + qtyPrice;
-      doc.setFont("courier","normal"); doc.setFontSize(7.8);
-      doc.text(leftTxt, x, y);
-      doc.setFontSize(8.5);
-      doc.text(fmt(it.cantidad*it.precio), x+w, y, {align:"right"});
-      y+=5;
+      doc.setFontSize(7.2);
+      doc.text(cod, colCod, y);
+      doc.text(nombre, colProd, y);
+      doc.text(String(it.cantidad), colUnd, y, {align:"right"});
+      doc.text(Number(it.precio).toFixed(2), colPU, y, {align:"right"});
+      doc.text(Number(it.cantidad*it.precio).toFixed(2), colTot, y, {align:"right"});
+      y += 4.6;
     });
     rule();
     row("TOTAL", fmt(venta.total));
