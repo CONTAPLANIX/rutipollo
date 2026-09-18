@@ -177,6 +177,10 @@
   .ac-item:last-child{ border-bottom:none; }
   .ac-item:hover, .ac-item:active{ background:var(--paper-alt); }
   .ac-item .sub{ font-size:11px; color:var(--ink-soft); margin-top:1px; }
+
+  .ac-list.ac-list-overlay{ position:fixed !important; left:auto; right:auto; margin-top:0; }
+  .ac-list-overlay .ac-item{ padding:15px 18px; font-size:16px; }
+  .ac-list-overlay .ac-item .sub{ font-size:13px; margin-top:3px; }
   .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   @media (max-width:520px){ .row2{ grid-template-columns:1fr; } }
 
@@ -640,6 +644,17 @@
         + '</div>';
     }).join("");
     el.hidden = false;
+    el.classList.add("ac-list-overlay");
+    var inputEl = document.querySelector('.item-input[data-idx="'+idx+'"][data-field="producto"]');
+    if(inputEl){
+      var r = inputEl.getBoundingClientRect();
+      var margin = 14;
+      var top = r.bottom + 6;
+      el.style.left = margin+"px";
+      el.style.right = margin+"px";
+      el.style.top = top+"px";
+      el.style.maxHeight = Math.max(160, Math.min(340, window.innerHeight - top - 16))+"px";
+    }
   }
 
   function hideAllSuggestions(){
