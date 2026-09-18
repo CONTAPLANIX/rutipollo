@@ -1154,6 +1154,14 @@
       + '  </div></div>'
       + (draft.tipoPago==="credito"
           ? '<p class="section-sub" style="margin:-6px 0 0;">Quedará como pendiente de cobro hasta que la marques pagada en "Por cobrar".</p>'
+            + (editing ? '' : ''
+              + '  <div class="field" style="margin-top:14px;max-width:220px;"><label for="f-abono-inicial">¿Le pagaron algo al momento? (opcional)</label><input id="f-abono-inicial" type="number" min="0" step="0.01" placeholder="0.00"></div>'
+              + '  <div class="field"><label>Método del abono (si escribiste un monto)</label><div class="pay-toggle" id="abono-inicial-metodo" data-selected="efectivo">'
+              + '    <button type="button" class="pay-opt on" data-action="abono-inicial-metodo" data-val="efectivo">Efectivo</button>'
+              + '    <button type="button" class="pay-opt" data-action="abono-inicial-metodo" data-val="banco">Banco</button>'
+              + '    <button type="button" class="pay-opt yape" data-action="abono-inicial-metodo" data-val="yape">Yape</button>'
+              + '    <button type="button" class="pay-opt plin" data-action="abono-inicial-metodo" data-val="plin">Plin</button>'
+              + '  </div></div>')
           : '  <div class="field" style="margin-top:14px;"><label>Forma de pago</label><div class="pay-toggle">'
             + '    <button type="button" class="pay-opt'+(draft.metodoPago==="efectivo"?" on":"")+'" data-action="pago" data-val="efectivo">Efectivo</button>'
             + '    <button type="button" class="pay-opt'+(draft.metodoPago==="banco"?" on":"")+'" data-action="pago" data-val="banco">Banco</button>'
@@ -1977,6 +1985,14 @@
       renderTab();
     }
     else if(action==="pago"){ draft.metodoPago = t.getAttribute("data-val"); renderTab(); }
+    else if(action==="abono-inicial-metodo"){
+      var wrap = document.getElementById("abono-inicial-metodo");
+      if(wrap){
+        wrap.setAttribute("data-selected", t.getAttribute("data-val"));
+        Array.prototype.forEach.call(wrap.querySelectorAll(".pay-opt"), function(b){ b.classList.remove("on"); });
+        t.classList.add("on");
+      }
+    }
     else if(action==="tipo-pago"){ draft.tipoPago = t.getAttribute("data-val"); renderTab(); }
     else if(action==="agregar-item"){ draft.items.push(blankItem()); renderTab(); }
     else if(action==="quitar-item"){
@@ -2019,6 +2035,20 @@
       } else {
         var maxCorr = state.ventas.reduce(function(m,v){return Math.max(m, v.correlativo||0);},0);
         var venta = { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago, vendedor: currentUser?currentUser.nombre:"", correlativo:maxCorr+1, creadoEn:Date.now() };
+        if(tipoPago==="credito"){
+          var abonoInicialEl = document.getElementById("f-abono-inicial");
+          var abonoInicialMonto = abonoInicialEl ? Math.min(Number(abonoInicialEl.value)||0, total) : 0;
+          if(abonoInicialMonto > 0.009){
+            var abonoInicialWrap = document.getElementById("abono-inicial-metodo");
+            var abonoInicialMetodo = abonoInicialWrap ? abonoInicialWrap.getAttribute("data-selected")||"efectivo" : "efectivo";
+            venta.abonos = [{ monto: abonoInicialMonto, metodo: abonoInicialMetodo, fecha: fecha }];
+            if(abonoInicialMonto >= total - 0.009){
+              venta.pagado = true;
+              venta.fechaPago = fecha;
+              venta.metodoPago = abonoInicialMetodo;
+            }
+          }
+        }
         draft = { fecha: todayISO(), cliente:"", notas:"", tipoPago:"contado", metodoPago:"efectivo", items:[blankItem()] };
         renderTab();
         ensureCliente(cliente);
