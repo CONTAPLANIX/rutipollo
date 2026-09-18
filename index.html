@@ -253,6 +253,9 @@
   @media (max-width:480px){ .stat-row{ grid-template-columns:repeat(2,1fr); } }
   .stat{ background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--r-md); padding:16px 18px; box-shadow:var(--shadow-sm); transition:box-shadow .18s var(--ease), transform .18s var(--ease); }
   .stat:hover{ box-shadow:var(--shadow); transform:translateY(-1px); }
+  .stat[data-action]{ cursor:pointer; }
+  .stat[data-action]:hover{ border-color:var(--line-strong); }
+  .stat[data-action]::after{ content:"Ver detalle ›"; display:block; font-size:10px; color:var(--ink-soft); margin-top:6px; opacity:.7; }
   .stat .label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600; }
   .stat .value{ font-family:"IBM Plex Mono",monospace; font-size:25px; margin-top:5px; font-weight:600; }
   .stat.hi{ border-color:var(--line-strong); }
@@ -443,6 +446,50 @@
     }
     return '<span class="pay-tag '+metodoTagClass(v.metodoPago)+'">'+metodoAbrev(v.metodoPago)+'</span>';
   }
+  function abrirDetalleCobros(titulo, ventas){
+    var rows = ventas.length ? ventas.map(notaRowHtml).join("") : '<p class="empty">Sin notas en este periodo.</p>';
+    var root = document.getElementById("overlay-root");
+    root.innerHTML = '<div class="overlay" data-action="cerrar-overlay">'
+      + '  <div class="modal">'
+      + '    <h2>'+escapeHtml(titulo)+'</h2>'
+      + '    <div style="max-height:60vh;overflow-y:auto;">'+rows+'</div>'
+      + '    <div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cerrar</button></div>'
+      + '  </div>'
+      + '</div>';
+  }
+
+  function abrirDetallePendientes(ventas){
+    var completos = ventas.filter(function(v){ return montoAbonado(v) <= 0.009; });
+    var parciales = ventas.filter(function(v){ return montoAbonado(v) > 0.009; });
+    function filaPendiente(v, esParcial){
+      var monto = esParcial ? saldoPendiente(v) : v.total;
+      var sub = esParcial ? ' <span style="color:var(--ink-soft);font-size:11.5px;">(de '+fmt(v.total)+')</span>' : '';
+      return '<div class="note-row"><div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+'</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;"><span class="amt" style="color:var(--danger);">'+fmt(monto)+'</span>'+sub+'<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div></div>';
+    }
+    var html = '<h3 style="font-size:12.5px;margin:14px 0 6px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;">Deben el total de la nota ('+completos.length+')</h3>'
+      + (completos.length ? completos.map(function(v){return filaPendiente(v,false);}).join("") : '<p class="empty">Ninguna.</p>')
+      + '<h3 style="font-size:12.5px;margin:18px 0 6px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;">Deben solo un saldo ('+parciales.length+')</h3>'
+      + (parciales.length ? parciales.map(function(v){return filaPendiente(v,true);}).join("") : '<p class="empty">Ninguna.</p>');
+    var root = document.getElementById("overlay-root");
+    root.innerHTML = '<div class="overlay" data-action="cerrar-overlay">'
+      + '  <div class="modal">'
+      + '    <h2>Por cobrar</h2>'
+      + '    <div style="max-height:65vh;overflow-y:auto;">'+html+'</div>'
+      + '    <div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cerrar</button></div>'
+      + '  </div>'
+      + '</div>';
+  }
+
+  function poolResumenPorScope(scope){
+    if(scope==="year") return groupByYear(ui.resumenYear);
+    if(scope==="month") return groupByYear(ui.resumenYear).filter(function(v){ return v.mes===ui.resumenMonth; });
+    if(scope==="cobrar") return state.ventas.filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; });
+    var diaSel2 = ui.resumenDiaSel || todayISO();
+    return state.ventas.filter(function(v){ return v.fecha===diaSel2; })
+      .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; });
+  }
+
   function notaRowHtml(v){
     return '<div class="note-row">'
       + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+'</div>'
@@ -1328,11 +1375,11 @@
         + '  <div class="stat hi"><div class="label">Total '+ui.resumenYear+'</div><div class="value">'+fmt(totalYear)+'</div></div>'
         + '  <div class="stat"><div class="label">Promedio mensual</div><div class="value">'+fmt(promedio)+'</div></div>'
         + '  <div class="stat"><div class="label">Mejor mes</div><div class="value" style="font-size:18px;">'+mejorMes+'</div></div>'
-        + '  <div class="stat"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(totalEfectivo)+'</div></div>'
-        + '  <div class="stat"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(totalBanco)+'</div></div>'
-        + (totalYape>0 ? '  <div class="stat"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(totalYape)+'</div></div>' : '')
-        + (totalPlin>0 ? '  <div class="stat"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(totalPlin)+'</div></div>' : '')
-        + (totalPorCobrar>0 ? '  <div class="stat"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(totalPorCobrar)+'</div></div>' : '')
+        + '  <div class="stat" data-action="detalle-metodo" data-metodo="efectivo" data-scope="year"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(totalEfectivo)+'</div></div>'
+        + '  <div class="stat" data-action="detalle-metodo" data-metodo="banco" data-scope="year"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(totalBanco)+'</div></div>'
+        + (totalYape>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="yape" data-scope="year"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(totalYape)+'</div></div>' : '')
+        + (totalPlin>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="plin" data-scope="year"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(totalPlin)+'</div></div>' : '')
+        + (totalPorCobrar>0 ? '  <div class="stat" data-action="detalle-pendientes" data-scope="year"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(totalPorCobrar)+'</div></div>' : '')
         + '</div>'
         + '<div class="card chart-card">'+svg+'</div>'
         + '<div class="items-wrap" style="margin-top:16px;"><table><thead><tr><th>Mes</th><th>Notas</th><th>Total</th></tr></thead><tbody>'+rowsTable+'</tbody></table></div>';
@@ -1376,11 +1423,11 @@
           + '<div class="stat-row">'
           + '  <div class="stat hi"><div class="label">Total del día</div><div class="value">'+fmt(totalDia)+'</div></div>'
           + '  <div class="stat"><div class="label">Notas emitidas</div><div class="value">'+ventasDia.length+'</div></div>'
-          + '  <div class="stat"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(efvoDia)+'</div></div>'
-          + '  <div class="stat"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(bcoDia)+'</div></div>'
-          + (yapeDia>0 ? '  <div class="stat"><div class="label" style="color:#742284;">Yape</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeDia)+'</div></div>' : '')
-          + (plinDia>0 ? '  <div class="stat"><div class="label" style="color:#049a91;">Plin</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinDia)+'</div></div>' : '')
-          + (cobrarDia>0 ? '  <div class="stat"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(cobrarDia)+'</div></div>' : '')
+          + '  <div class="stat" data-action="detalle-metodo" data-metodo="efectivo" data-scope="day"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(efvoDia)+'</div></div>'
+          + '  <div class="stat" data-action="detalle-metodo" data-metodo="banco" data-scope="day"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(bcoDia)+'</div></div>'
+          + (yapeDia>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="yape" data-scope="day"><div class="label" style="color:#742284;">Yape</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeDia)+'</div></div>' : '')
+          + (plinDia>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="plin" data-scope="day"><div class="label" style="color:#049a91;">Plin</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinDia)+'</div></div>' : '')
+          + (cobrarDia>0 ? '  <div class="stat" data-action="detalle-pendientes" data-scope="day"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(cobrarDia)+'</div></div>' : '')
           + '</div>'
           + '<div class="card" style="padding:6px 16px;">'+filaDia+'</div>');
     }
@@ -1396,6 +1443,11 @@
       });
       var totalMesW = semanas.reduce(function(s,w){return s+w.total;},0);
       var notasMesW = semanas.reduce(function(s,w){return s+w.notas;},0);
+      var efectivoMesW = ventasMes.filter(function(v){return estaPagado(v) && metodoTagClass(v.metodoPago)==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
+      var bancoMesW = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
+      var yapeMesW = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="yape";}).reduce(function(s,v){return s+v.total;},0);
+      var plinMesW = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="plin";}).reduce(function(s,v){return s+v.total;},0);
+      var porCobrarMesW = ventasMes.filter(estaPendiente).reduce(function(s,v){return s+saldoPendiente(v);},0);
       var svgSemanas = barChartSvg(semanas.map(function(w){return w.desde+"-"+w.hasta;}), semanas.map(function(w){return w.total;}), "Ingresos por semana en "+monthLabel);
       var bodySemanas = semanas.filter(function(w){return w.notas>0;}).map(function(w){
         var lista = ventasMes.filter(function(v){return v.dia>=w.desde && v.dia<=w.hasta;}).sort(function(a,b){return (a.creadoEn||0)-(b.creadoEn||0);});
@@ -1409,8 +1461,15 @@
         + toolbar
         + vistaToggle
         + (notasMesW===0 ? '<p class="empty">Sin ventas registradas en '+monthLabel+' '+ui.resumenYear+'.</p>' : ''
-          + '<div class="stat-row"><div class="stat hi"><div class="label">Total del mes</div><div class="value">'+fmt(totalMesW)+'</div></div>'
-          + '<div class="stat"><div class="label">Notas emitidas</div><div class="value">'+notasMesW+'</div></div></div>'
+          + '<div class="stat-row">'
+          + '  <div class="stat hi"><div class="label">Total del mes</div><div class="value">'+fmt(totalMesW)+'</div></div>'
+          + '  <div class="stat"><div class="label">Notas emitidas</div><div class="value">'+notasMesW+'</div></div>'
+          + '  <div class="stat" data-action="detalle-metodo" data-metodo="efectivo" data-scope="month"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(efectivoMesW)+'</div></div>'
+          + '  <div class="stat" data-action="detalle-metodo" data-metodo="banco" data-scope="month"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(bancoMesW)+'</div></div>'
+          + (yapeMesW>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="yape" data-scope="month"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeMesW)+'</div></div>' : '')
+          + (plinMesW>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="plin" data-scope="month"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinMesW)+'</div></div>' : '')
+          + (porCobrarMesW>0 ? '  <div class="stat" data-action="detalle-pendientes" data-scope="month"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(porCobrarMesW)+'</div></div>' : '')
+          + '</div>'
           + '<div class="card chart-card">'+svgSemanas+'</div>'
           + bodySemanas);
     }
@@ -1448,11 +1507,11 @@
         + '  <div class="stat hi"><div class="label">Total del mes</div><div class="value">'+fmt(totalMes)+'</div></div>'
         + '  <div class="stat"><div class="label">Notas emitidas</div><div class="value">'+notasMes+'</div></div>'
         + '  <div class="stat"><div class="label">Promedio por día activo</div><div class="value" style="font-size:19px;">'+fmt(promedioDia)+'</div></div>'
-        + '  <div class="stat"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(efectivoMes)+'</div></div>'
-        + '  <div class="stat"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(bancoMes)+'</div></div>'
-        + (yapeMes>0 ? '  <div class="stat"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeMes)+'</div></div>' : '')
-        + (plinMes>0 ? '  <div class="stat"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinMes)+'</div></div>' : '')
-        + (porCobrarMes>0 ? '  <div class="stat"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(porCobrarMes)+'</div></div>' : '')
+        + '  <div class="stat" data-action="detalle-metodo" data-metodo="efectivo" data-scope="month"><div class="label">Efectivo cobrado</div><div class="value" style="font-size:19px;">'+fmt(efectivoMes)+'</div></div>'
+        + '  <div class="stat" data-action="detalle-metodo" data-metodo="banco" data-scope="month"><div class="label">Banco cobrado</div><div class="value" style="font-size:19px;">'+fmt(bancoMes)+'</div></div>'
+        + (yapeMes>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="yape" data-scope="month"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeMes)+'</div></div>' : '')
+        + (plinMes>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="plin" data-scope="month"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinMes)+'</div></div>' : '')
+        + (porCobrarMes>0 ? '  <div class="stat" data-action="detalle-pendientes" data-scope="month"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(porCobrarMes)+'</div></div>' : '')
         + '</div>'
         + '<div class="card chart-card">'+svgDia+'</div>'
         + bodyDias);
@@ -2170,6 +2229,16 @@
     else if(action==="resumen-year-next"){ ui.resumenYear++; renderTab(); }
     else if(action==="resumen-month-prev"){ ui.resumenMonth = ui.resumenMonth===0 ? 12 : ui.resumenMonth-1; renderTab(); }
     else if(action==="resumen-month-next"){ ui.resumenMonth = ui.resumenMonth===12 ? 0 : ui.resumenMonth+1; renderTab(); }
+    else if(action==="detalle-metodo"){
+      var metodoD = t.getAttribute("data-metodo");
+      var poolD = poolResumenPorScope(t.getAttribute("data-scope"));
+      var listaD = poolD.filter(function(v){ return estaPagado(v) && v.metodoPago===metodoD; });
+      abrirDetalleCobros(metodoLabel(metodoD)+" cobrado", listaD);
+    }
+    else if(action==="detalle-pendientes"){
+      var poolP = poolResumenPorScope(t.getAttribute("data-scope"));
+      abrirDetallePendientes(poolP.filter(estaPendiente));
+    }
     else if(action==="resumen-vista"){ ui.resumenVista = t.getAttribute("data-vista"); renderTab(); }
     else if(action==="cobrar-vista"){ ui.cobrarVista = t.getAttribute("data-vista"); renderTab(); }
     else if(action==="cobrar-year-prev"){ ui.cobrarYear--; renderTab(); }
