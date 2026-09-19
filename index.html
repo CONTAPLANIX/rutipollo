@@ -329,7 +329,14 @@
   .gate-form input{ background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--r-sm); padding:12px 14px; font-size:15px; color:var(--ink); text-align:center; box-shadow:var(--shadow-sm); }
   .gate-form input:focus{ border-color:var(--focus); box-shadow:0 0 0 3.5px var(--focus-ring); }
 
+  @page{ size:80mm auto; margin:0; }
   @media print{
+    html, body{ width:80mm; margin:0; padding:0; background:#fff !important; }
+    .overlay{ padding:0 !important; background:#fff !important; backdrop-filter:none !important; display:block !important; }
+    .modal{ box-shadow:none !important; border:none !important; padding:0 !important; max-width:80mm !important; width:80mm !important; border-radius:0 !important; animation:none !important; }
+    .ticket{ width:72mm !important; max-width:72mm !important; margin:0 auto !important; padding:3mm 0 !important; color:#000 !important; background:#fff !important; border-top:none !important; border-bottom:none !important; }
+    .ticket *{ color:#000 !important; }
+    .ticket .biz-logo{ width:38mm !important; height:38mm !important; }
     body *{ visibility:hidden; }
     #overlay-root, #overlay-root *{ visibility:visible; }
     #overlay-root{ position:absolute; inset:0; background:#fff !important; padding:0; }
