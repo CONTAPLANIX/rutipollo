@@ -304,13 +304,14 @@
   .ticket .ubic-block div{ color:var(--ink-soft); line-height:1.4; }
   .ticket .ubic-block a{ display:inline-block; margin-top:3px; font-size:10.5px; color:var(--accent); }
   .ticket hr{ border:none; border-top:1px dashed var(--line); margin:10px 0; }
-  .ticket table.tk-items{ width:100%; min-width:0; border-collapse:collapse; table-layout:fixed; margin:3px 0 4px; font-size:10.5px; border:1px solid var(--ink); }
+  .ticket table.tk-items{ width:100%; min-width:0; border-collapse:collapse; table-layout:fixed; margin:3px 0 4px; font-size:10px; border:1px solid var(--ink); }
   .ticket .tk-moneda{ font-size:10.5px; font-weight:700; margin-top:10px; }
-  .ticket .tk-items th, .ticket .tk-items td{ border:1px solid var(--ink); padding:4px 3px; text-align:right; vertical-align:middle; background:transparent; overflow-wrap:anywhere; letter-spacing:0; text-transform:none; color:var(--ink); }
+  .ticket .tk-items th, .ticket .tk-items td{ border:1px solid var(--ink); padding:4px 3px; text-align:right; vertical-align:middle; background:transparent; white-space:nowrap; letter-spacing:0; text-transform:none; color:var(--ink); }
   .ticket .tk-items th{ font-size:9px; font-weight:700; text-transform:uppercase; }
   .ticket .tk-items .l{ text-align:left; }
+  .ticket .tk-items td.l:nth-child(2){ white-space:normal; overflow-wrap:break-word; }
   .ticket .tk-items tbody tr:hover{ background:transparent; }
-  .ticket .tk-items col.c-cod{ width:15%; } .ticket .tk-items col.c-prod{ width:29%; } .ticket .tk-items col.c-cant{ width:11%; } .ticket .tk-items col.c-kg{ width:13%; } .ticket .tk-items col.c-pu{ width:15%; } .ticket .tk-items col.c-tot{ width:17%; }
+  .ticket .tk-items col.c-cod{ width:15%; } .ticket .tk-items col.c-prod{ width:24%; } .ticket .tk-items col.c-cant{ width:11%; } .ticket .tk-items col.c-kg{ width:14%; } .ticket .tk-items col.c-pu{ width:16%; } .ticket .tk-items col.c-tot{ width:20%; }
   .ticket .it{ display:flex; justify-content:space-between; font-size:12.5px; gap:8px; margin-bottom:5px; }
   .ticket .it .nm{ min-width:0; overflow-wrap:anywhere; }
   .ticket .it .qp{ color:var(--ink-soft); font-size:11px; }
@@ -353,9 +354,9 @@
     .ticket .meta{ font-size:9.5pt !important; margin-bottom:1mm !important; gap:3mm; }
     .ticket .meta span:last-child{ text-align:right; overflow-wrap:anywhere; }
     .ticket hr{ border-top:1px solid #000 !important; margin:2.5mm 0 !important; }
-    .ticket table.tk-items{ font-size:8pt !important; border:0.3mm solid #000 !important; }
-    .ticket .tk-items th, .ticket .tk-items td{ border:0.25mm solid #000 !important; padding:1mm 0.8mm !important; }
-    .ticket .tk-items th{ font-size:6.5pt !important; }
+    .ticket table.tk-items{ font-size:7pt !important; border:0.3mm solid #000 !important; }
+    .ticket .tk-items th, .ticket .tk-items td{ border:0.25mm solid #000 !important; padding:1mm 0.6mm !important; }
+    .ticket .tk-items th{ font-size:6pt !important; }
     .ticket .it{ font-size:9.5pt !important; margin-bottom:1.8mm !important; gap:3mm !important; }
     .ticket .it > div:last-child{ white-space:nowrap; font-weight:600; }
     .ticket .it .qp{ font-size:8.5pt !important; }
