@@ -584,6 +584,7 @@
       .catch(function(){ return null; });
   }
 
+  function codigoItem(it){ return it.codigo || codigoDeProducto(it.producto); }
   function codigoDeProducto(nombre){
     var n = String(nombre||"").trim().toLowerCase();
     var p = state.productos.find(function(x){ return x.nombre.trim().toLowerCase()===n; });
@@ -609,14 +610,15 @@
     var counts = {};
     state.ventas.forEach(function(v){ (v.items||[]).forEach(function(it){ counts[it.producto] = (counts[it.producto]||0)+1; }); });
     var byName = {};
-    state.productos.forEach(function(p){ byName[p.nombre] = p; });
-    Object.keys(counts).forEach(function(n){ if(!byName[n]) byName[n] = { nombre:n }; });
+    var nombresCatalogo = {};
+    state.productos.forEach(function(p){ byName[(p.codigo||"")+"|"+p.nombre] = p; nombresCatalogo[p.nombre] = true; });
+    Object.keys(counts).forEach(function(n){ if(!nombresCatalogo[n]) byName["|"+n] = { nombre:n }; });
     var list = Object.keys(byName).map(function(n){ return byName[n]; });
     var q = (query||"").trim().toLowerCase();
     if(q) list = list.filter(function(p){ return p.nombre.toLowerCase().indexOf(q)>-1 || (p.codigo && p.codigo.toLowerCase().indexOf(q)>-1); });
     if(q) list.sort(function(a,b){ return (counts[b.nombre]||0)-(counts[a.nombre]||0) || a.nombre.localeCompare(b.nombre); });
-    else list.sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
-    return list.slice(0, q ? 8 : 200);
+    else list.sort(function(a,b){ return a.nombre.localeCompare(b.nombre) || (a.codigo||"").localeCompare(b.codigo||""); });
+    return list.slice(0, q ? 30 : 200);
   }
 
   function showClienteSuggestions(query){
@@ -639,7 +641,7 @@
       var subParts = [];
       if(p.codigo) subParts.push("Cód. "+p.codigo);
       if(p.precio) subParts.push(fmt(p.precio));
-      return '<div class="ac-item" data-action="elegir-producto" data-idx="'+idx+'" data-val="'+escapeHtml(p.nombre)+'" data-precio="'+(p.precio||0)+'">'+escapeHtml(p.nombre)
+      return '<div class="ac-item" data-action="elegir-producto" data-idx="'+idx+'" data-val="'+escapeHtml(p.nombre)+'" data-cod="'+escapeHtml(p.codigo||"")+'" data-precio="'+(p.precio||0)+'">'+(p.codigo?'<strong class="mono" style="color:var(--accent);">'+escapeHtml(p.codigo)+'</strong> ':'')+escapeHtml(p.nombre)
         + (subParts.length ? '<div class="sub">'+escapeHtml(subParts.join(" · "))+'</div>' : '')
         + '</div>';
     }).join("");
@@ -1721,7 +1723,7 @@
       var estado = estaPendiente(v) ? (esPagoParcial(v)?"Abono parcial":"Pendiente") : "Pagado";
       (v.items||[]).forEach(function(it){
         rows.push([
-          v.correlativo, v.fecha, v.cliente, codigoDeProducto(it.producto), it.producto, it.cantidad, it.precio,
+          v.correlativo, v.fecha, v.cliente, codigoItem(it), it.producto, it.cantidad, it.precio,
           (Number(it.cantidad)*Number(it.precio)).toFixed(2), Number(v.total).toFixed(2),
           v.tipoPago==="credito"?"Pendiente de pago":"Contado", estado, saldoPendiente(v).toFixed(2),
           v.metodoPago ? metodoLabel(v.metodoPago) : "", v.vendedor||"",
@@ -1849,7 +1851,7 @@
 
     doc.setFont("courier","normal");
     venta.items.forEach(function(it, idx){
-      var cod = codigoDeProducto(it.producto) || "-";
+      var cod = codigoItem(it) || "-";
       var budget = 15;
       var nombre = it.producto.length > budget ? it.producto.substring(0, budget-1)+"…" : it.producto;
       var ty = y - 1.7;
@@ -1931,7 +1933,7 @@
     currentTicketVenta = venta;
     var root = document.getElementById("overlay-root");
     var itemsHtml = venta.items.map(function(i){
-      var cod = codigoDeProducto(i.producto);
+      var cod = codigoItem(i);
       return '<div class="it"><div class="nm">'+(cod?'<span class="corr">'+escapeHtml(cod)+'</span> ':'')+escapeHtml(i.producto)+'<div class="qp">'+i.cantidad+' x '+fmt(i.precio)+'</div></div><div>'+fmt(i.cantidad*i.precio)+'</div></div>';
     }).join("");
     root.innerHTML = ''
@@ -2084,6 +2086,7 @@
       var pprecio = Number(t.getAttribute("data-precio"))||0;
       if(!draft.items[pidx]) return;
       draft.items[pidx].producto = pnombre;
+      draft.items[pidx].codigo = t.getAttribute("data-cod") || "";
       if(pprecio && !draft.items[pidx].precio) draft.items[pidx].precio = pprecio;
       hideAllSuggestions();
       renderTab();
@@ -2120,7 +2123,7 @@
       var cliente = document.getElementById("f-cliente").value.trim();
       var notas = document.getElementById("f-notas").value.trim();
       var validItems = draft.items.filter(function(i){ return String(i.producto).trim() && Number(i.cantidad)>0; })
-        .map(function(i){ return { producto:String(i.producto).trim(), cantidad:Number(i.cantidad), precio:Number(i.precio)||0 }; });
+        .map(function(i){ var o = { producto:String(i.producto).trim(), cantidad:Number(i.cantidad), precio:Number(i.precio)||0 }; if(i.codigo) o.codigo = i.codigo; return o; });
       if(!cliente){ alert("Ingresa el nombre del cliente o puesto."); return; }
       if(!validItems.length){ alert("Agrega al menos un producto con cantidad."); return; }
       var total = validItems.reduce(function(s,i){return s+i.cantidad*i.precio;},0);
@@ -2400,6 +2403,7 @@
       var field = t.getAttribute("data-field");
       if(!draft.items[idx]) return;
       draft.items[idx][field] = field==="producto" ? t.value : Number(t.value);
+      if(field==="producto") delete draft.items[idx].codigo;
       var sub = (Number(draft.items[idx].cantidad)||0) * (Number(draft.items[idx].precio)||0);
       var subEl = document.getElementById("subtotal-"+idx);
       if(subEl) subEl.textContent = fmt(sub);
