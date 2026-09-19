@@ -616,7 +616,8 @@
     var list = Object.keys(byName).map(function(n){ return byName[n]; });
     var q = (query||"").trim().toLowerCase();
     if(q) list = list.filter(function(p){ return p.nombre.toLowerCase().indexOf(q)>-1 || (p.codigo && p.codigo.toLowerCase().indexOf(q)>-1); });
-    if(q) list.sort(function(a,b){ return (counts[b.nombre]||0)-(counts[a.nombre]||0) || a.nombre.localeCompare(b.nombre); });
+    function rangoCodigo(p){ var c = (p.codigo||"").toLowerCase(); return c===q ? 0 : (c.indexOf(q)===0 || c.replace(/^0+/,"").indexOf(q.replace(/^0+/,""))===0 && q ? 1 : 2); }
+    if(q) list.sort(function(a,b){ return rangoCodigo(a)-rangoCodigo(b) || (counts[b.nombre]||0)-(counts[a.nombre]||0) || a.nombre.localeCompare(b.nombre); });
     else list.sort(function(a,b){ return a.nombre.localeCompare(b.nombre) || (a.codigo||"").localeCompare(b.codigo||""); });
     return list.slice(0, q ? 30 : 200);
   }
