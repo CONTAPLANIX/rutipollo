@@ -227,7 +227,7 @@
   tbody tr:last-child td{ border-bottom:none; }
   td input{ width:100%; background:transparent; border:none; border-bottom:1px solid transparent; padding:5px 2px; font-size:14px; color:var(--ink); }
   td input:focus{ border-bottom-color:var(--focus); }
-  .col-cant{ width:78px; } .col-precio{ width:110px; } .col-sub{ width:110px; } .col-del{ width:38px; }
+  .col-cant{ width:78px; } .col-kg{ width:84px; } .col-precio{ width:110px; } .col-sub{ width:110px; } .col-del{ width:38px; }
   .total-row{ display:flex; justify-content:flex-end; align-items:baseline; gap:10px; padding:14px 4px 4px; font-size:15px; }
   .total-row .amt{ font-size:22px; color:var(--accent); font-weight:600; }
   .actions-row{ display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-wrap:wrap; }
@@ -304,6 +304,13 @@
   .ticket .ubic-block div{ color:var(--ink-soft); line-height:1.4; }
   .ticket .ubic-block a{ display:inline-block; margin-top:3px; font-size:10.5px; color:var(--accent); }
   .ticket hr{ border:none; border-top:1px dashed var(--line); margin:10px 0; }
+  .ticket table.tk-items{ width:100%; min-width:0; border-collapse:collapse; table-layout:fixed; margin:3px 0 4px; font-size:10.5px; border:1px solid var(--ink); }
+  .ticket .tk-moneda{ font-size:10.5px; font-weight:700; margin-top:10px; }
+  .ticket .tk-items th, .ticket .tk-items td{ border:1px solid var(--ink); padding:4px 3px; text-align:right; vertical-align:middle; background:transparent; overflow-wrap:anywhere; letter-spacing:0; text-transform:none; color:var(--ink); }
+  .ticket .tk-items th{ font-size:9px; font-weight:700; text-transform:uppercase; }
+  .ticket .tk-items .l{ text-align:left; }
+  .ticket .tk-items tbody tr:hover{ background:transparent; }
+  .ticket .tk-items col.c-cod{ width:15%; } .ticket .tk-items col.c-prod{ width:29%; } .ticket .tk-items col.c-cant{ width:11%; } .ticket .tk-items col.c-kg{ width:13%; } .ticket .tk-items col.c-pu{ width:15%; } .ticket .tk-items col.c-tot{ width:17%; }
   .ticket .it{ display:flex; justify-content:space-between; font-size:12.5px; gap:8px; margin-bottom:5px; }
   .ticket .it .nm{ min-width:0; overflow-wrap:anywhere; }
   .ticket .it .qp{ color:var(--ink-soft); font-size:11px; }
@@ -346,6 +353,9 @@
     .ticket .meta{ font-size:9.5pt !important; margin-bottom:1mm !important; gap:3mm; }
     .ticket .meta span:last-child{ text-align:right; overflow-wrap:anywhere; }
     .ticket hr{ border-top:1px solid #000 !important; margin:2.5mm 0 !important; }
+    .ticket table.tk-items{ font-size:8pt !important; border:0.3mm solid #000 !important; }
+    .ticket .tk-items th, .ticket .tk-items td{ border:0.25mm solid #000 !important; padding:1mm 0.8mm !important; }
+    .ticket .tk-items th{ font-size:6.5pt !important; }
     .ticket .it{ font-size:9.5pt !important; margin-bottom:1.8mm !important; gap:3mm !important; }
     .ticket .it > div:last-child{ white-space:nowrap; font-weight:600; }
     .ticket .it .qp{ font-size:8.5pt !important; }
@@ -425,7 +435,14 @@
   var editingVentaId = null;
   var currentTicketVenta = null;
 
-  function blankItem(){ return { producto:"", cantidad:1, precio:0 }; }
+  function blankItem(){ return { producto:"", cantidad:1, kg:"", precio:0 }; }
+  // Si la fila tiene kilogramos, el precio es por kilo; si no, es por unidad (cantidad).
+  function subtotalItem(i){
+    var kg = Number(i.kg)||0;
+    return (kg>0 ? kg : (Number(i.cantidad)||0)) * (Number(i.precio)||0);
+  }
+  var MONEDA_NOMBRE = "SOLES";
+  function numTxt(n){ return String(Number((Number(n)||0).toFixed(3))); }
 
   function genId(prefix){ return prefix+"_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7); }
 
@@ -1225,10 +1242,11 @@
   }
 
   function itemRowHtml(item, idx){
-    var sub = (Number(item.cantidad)||0) * (Number(item.precio)||0);
+    var sub = subtotalItem(item);
     return '<tr data-row="'+idx+'">'
       + '<td><div class="ac-wrap"><input class="item-input" autocomplete="off" data-idx="'+idx+'" data-field="producto" value="'+escapeHtml(item.producto)+'" placeholder="Nombre o código del producto"><div class="ac-list" id="ac-item-'+idx+'" hidden></div></div></td>'
       + '<td class="col-cant"><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="cantidad" value="'+item.cantidad+'"></td>'
+      + '<td class="col-kg"><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="kg" placeholder="kg" value="'+(item.kg===undefined||item.kg===null?"":item.kg)+'"></td>'
       + '<td class="col-precio"><input class="item-input" type="number" min="0" step="0.01" data-idx="'+idx+'" data-field="precio" value="'+item.precio+'"></td>'
       + '<td class="col-sub mono" id="subtotal-'+idx+'">'+fmt(sub)+'</td>'
       + '<td class="col-del"><button class="btn-ghost" data-action="quitar-item" data-idx="'+idx+'" title="Quitar" aria-label="Quitar fila">✕</button></td>'
@@ -1236,7 +1254,7 @@
   }
 
   function draftTotal(){
-    return draft.items.reduce(function(s,i){ return s + (Number(i.cantidad)||0)*(Number(i.precio)||0); }, 0);
+    return draft.items.reduce(function(s,i){ return s + subtotalItem(i); }, 0);
   }
 
   function viewNueva(){
@@ -1257,7 +1275,7 @@
       + '    <div class="field"><label for="f-fecha">Fecha</label><input id="f-fecha" type="date" value="'+draft.fecha+'"></div>'
       + '    <div class="field ac-wrap"><label for="f-cliente">Cliente / puesto</label><input id="f-cliente" autocomplete="off" type="text" placeholder="Ej: Bodega San José" value="'+escapeHtml(draft.cliente)+'"><div class="ac-list" id="ac-cliente" hidden></div></div>'
       + '  </div>'
-      + '  <div class="items-wrap"><table><thead><tr><th>Producto</th><th>Cant.</th><th>P. Unit.</th><th>Subtotal</th><th></th></tr></thead><tbody id="items-body">'+rows+'</tbody></table></div>'
+      + '  <div class="items-wrap"><table><thead><tr><th>Producto</th><th>Cant.</th><th>Kg</th><th>P. Unit.</th><th>Subtotal</th><th></th></tr></thead><tbody id="items-body">'+rows+'</tbody></table></div>'
       + '  <div style="margin-top:10px;"><button class="btn btn-sm" data-action="agregar-item">+ Agregar producto</button></div>'
       + '  <div class="field" style="margin-top:14px;"><label>Tipo de venta</label><div class="pay-toggle">'
       + '    <button type="button" class="pay-opt'+(draft.tipoPago==="contado"?" on":"")+'" data-action="tipo-pago" data-val="contado">Contado</button>'
@@ -1787,14 +1805,14 @@
   }
 
   function buildVentasCsv(ventas){
-    var header = ["Correlativo","Fecha","Cliente","Código","Producto","Cantidad","Precio unitario","Subtotal","Total nota","Tipo de venta","Estado","Saldo pendiente","Forma de pago","Vendedor","Ubicación (mapa)","Notas"];
+    var header = ["Correlativo","Fecha","Cliente","Código","Producto","Cantidad","Kg","Precio unitario","Subtotal","Total nota","Tipo de venta","Estado","Saldo pendiente","Forma de pago","Vendedor","Ubicación (mapa)","Notas"];
     var rows = [header];
     ventas.slice().sort(function(a,b){ return (a.creadoEn||0)-(b.creadoEn||0); }).forEach(function(v){
       var estado = estaPendiente(v) ? (esPagoParcial(v)?"Abono parcial":"Pendiente") : "Pagado";
       (v.items||[]).forEach(function(it){
         rows.push([
-          v.correlativo, v.fecha, v.cliente, codigoItem(it), it.producto, it.cantidad, it.precio,
-          (Number(it.cantidad)*Number(it.precio)).toFixed(2), Number(v.total).toFixed(2),
+          v.correlativo, v.fecha, v.cliente, codigoItem(it), it.producto, it.cantidad, it.kg||"", it.precio,
+          subtotalItem(it).toFixed(2), Number(v.total).toFixed(2),
           v.tipoPago==="credito"?"Pendiente de pago":"Contado", estado, saldoPendiente(v).toFixed(2),
           v.metodoPago ? metodoLabel(v.metodoPago) : "", v.vendedor||"",
           v.ubicacion ? mapsLink(v.ubicacion) : "", v.notas||""
@@ -1903,11 +1921,12 @@
     }
     y += 1.5;
 
-    // Tabla: CÓD | PRODUCTO | UND | P.UNIT | TOTAL
-    var cb = [x, x+11, x+35, x+44, x+56, x+w];
-    var headerH = 5.8, fs = 7.5, lh = 3.3, cap = 1.9;
+    doc.setFont("courier","bold"); doc.setFontSize(8); doc.text("MONEDA: "+MONEDA_NOMBRE, x, y); y += 2.6;
+    // Tabla: CÓD | PRODUCTO | CANT | KG | P.UNIT | TOTAL
+    var cb = [x, x+10, x+28.5, x+36, x+45.5, x+57, x+w];
+    var headerH = 5.8, fs = 6.8, lh = 3.1, cap = 1.75;
     var tableTop = y;
-    var nomW = cb[2]-cb[1]-2.4;
+    var nomW = cb[2]-cb[1]-1.6;
     doc.setFont("courier","normal"); doc.setFontSize(fs);
     var filas = venta.items.map(function(it){
       var lines = doc.splitTextToSize(String(it.producto), nomW);
@@ -1922,12 +1941,13 @@
     doc.line(x, tableTop+headerH, x+w, tableTop+headerH);
 
     var hy = tableTop + headerH/2 + 1.1;
-    doc.setFont("courier","bold"); doc.setFontSize(6.8);
-    doc.text("CÓD", cb[0]+1.2, hy);
-    doc.text("PRODUCTO", cb[1]+1.2, hy);
-    doc.text("UND", cb[3]-1.2, hy, {align:"right"});
-    doc.text("P.UNIT", cb[4]-1.2, hy, {align:"right"});
-    doc.text("TOTAL", cb[5]-1.2, hy, {align:"right"});
+    doc.setFont("courier","bold"); doc.setFontSize(6);
+    doc.text("CÓD", cb[0]+0.8, hy);
+    doc.text("PRODUCTO", cb[1]+0.8, hy);
+    doc.text("CANT", cb[3]-0.8, hy, {align:"right"});
+    doc.text("KG", cb[4]-0.8, hy, {align:"right"});
+    doc.text("P.UNIT", cb[5]-0.8, hy, {align:"right"});
+    doc.text("TOTAL", cb[6]-0.8, hy, {align:"right"});
 
     doc.setFont("courier","normal"); doc.setFontSize(fs);
     var ry = tableTop + headerH;
@@ -1935,12 +1955,14 @@
       var it = f.it;
       var textH = cap + (f.lines.length-1)*lh;
       var ty = ry + (f.h - textH)/2 + cap;
+      doc.setFontSize(6.5);
+      doc.text(codigoItem(it) || "-", cb[0]+0.8, ty);
       doc.setFontSize(fs);
-      doc.text(codigoItem(it) || "-", cb[0]+1.2, ty);
-      doc.text(f.lines, cb[1]+1.2, ty, {lineHeightFactor: lh/(fs*0.3528)});
-      doc.text(String(it.cantidad), cb[3]-1.2, ty, {align:"right"});
-      doc.text(Number(it.precio).toFixed(2), cb[4]-1.2, ty, {align:"right"});
-      doc.text(Number(it.cantidad*it.precio).toFixed(2), cb[5]-1.2, ty, {align:"right"});
+      doc.text(f.lines, cb[1]+0.8, ty, {lineHeightFactor: lh/(fs*0.3528)});
+      doc.text(numTxt(it.cantidad), cb[3]-0.8, ty, {align:"right"});
+      doc.text(Number(it.kg)>0 ? numTxt(it.kg) : "-", cb[4]-0.8, ty, {align:"right"});
+      doc.text(Number(it.precio).toFixed(2), cb[5]-0.8, ty, {align:"right"});
+      doc.text(subtotalItem(it).toFixed(2), cb[6]-0.8, ty, {align:"right"});
       ry += f.h;
       if(idx < filas.length-1) doc.line(x, ry, x+w, ry);
     });
@@ -2065,10 +2087,11 @@
   function openTicket(venta){
     currentTicketVenta = venta;
     var root = document.getElementById("overlay-root");
-    var itemsHtml = venta.items.map(function(i){
-      var cod = codigoItem(i);
-      return '<div class="it"><div class="nm">'+(cod?'<span class="corr">'+escapeHtml(cod)+'</span> ':'')+escapeHtml(i.producto)+'<div class="qp">'+i.cantidad+' x '+fmt(i.precio)+'</div></div><div>'+fmt(i.cantidad*i.precio)+'</div></div>';
-    }).join("");
+    var itemsHtml = '<div class="tk-moneda">MONEDA: '+MONEDA_NOMBRE+'</div><table class="tk-items"><colgroup><col class="c-cod"><col class="c-prod"><col class="c-cant"><col class="c-kg"><col class="c-pu"><col class="c-tot"></colgroup><thead><tr><th class="l">Cód</th><th class="l">Producto</th><th>Cant</th><th>Kg</th><th>P.Unit</th><th>Total</th></tr></thead><tbody>'
+      + venta.items.map(function(i){
+        return '<tr><td class="l cod">'+escapeHtml(codigoItem(i)||"-")+'</td><td class="l">'+escapeHtml(i.producto)+'</td><td>'+numTxt(i.cantidad)+'</td><td>'+(Number(i.kg)>0?numTxt(i.kg):"-")+'</td><td>'+Number(i.precio).toFixed(2)+'</td><td>'+subtotalItem(i).toFixed(2)+'</td></tr>';
+      }).join("")
+      + '</tbody></table>';
     root.innerHTML = ''
       + '<div class="overlay" data-action="cerrar-overlay">'
       + '  <div class="modal" style="max-width:380px;">'
@@ -2084,9 +2107,7 @@
       + '      <div class="meta"><span>Cliente</span><span>'+escapeHtml(venta.cliente)+'</span></div>'
       + (venta.vendedor ? '      <div class="meta"><span>Vendedor</span><span>'+escapeHtml(venta.vendedor)+'</span></div>' : '')
       + (venta.ubicacion ? '      <div class="ubic-block"><strong>Ubicación:</strong><div id="ticket-direccion">Buscando dirección…</div><a href="'+mapsLink(venta.ubicacion)+'" target="_blank" rel="noopener">Ver en el mapa</a></div>' : '')
-      + '      <hr>'
       + itemsHtml
-      + '      <hr>'
       + '      <div class="total"><span>Total</span><span>'+fmt(venta.total)+'</span></div>'
       + '      <div class="pago-bloque">'+pagoLineas(venta).map(function(r){ return '<div class="meta"><span>'+escapeHtml(r[0])+'</span><span>'+escapeHtml(r[1])+'</span></div>'; }).join("")+'</div>'
       + (venta.notas ? '<div class="foot">'+escapeHtml(venta.notas)+'</div>' : '')
@@ -2264,10 +2285,10 @@
       var cliente = document.getElementById("f-cliente").value.trim();
       var notas = document.getElementById("f-notas").value.trim();
       var validItems = draft.items.filter(function(i){ return String(i.producto).trim() && Number(i.cantidad)>0; })
-        .map(function(i){ var o = { producto:String(i.producto).trim(), cantidad:Number(i.cantidad), precio:Number(i.precio)||0 }; if(i.codigo) o.codigo = i.codigo; return o; });
+        .map(function(i){ var o = { producto:String(i.producto).trim(), cantidad:Number(i.cantidad), precio:Number(i.precio)||0 }; if(Number(i.kg)>0) o.kg = Number(i.kg); if(i.codigo) o.codigo = i.codigo; return o; });
       if(!cliente){ alert("Ingresa el nombre del cliente o puesto."); return; }
       if(!validItems.length){ alert("Agrega al menos un producto con cantidad."); return; }
-      var total = validItems.reduce(function(s,i){return s+i.cantidad*i.precio;},0);
+      var total = validItems.reduce(function(s,i){return s+subtotalItem(i);},0);
       var fp = parseFecha(fecha);
       var tipoPago = draft.tipoPago==="credito" ? "credito" : "contado";
       var pagado = tipoPago==="contado";
@@ -2315,7 +2336,7 @@
       if(ve){
         editingVentaId = ve.id;
         draft = { fecha: ve.fecha, cliente: ve.cliente, notas: ve.notas||"", tipoPago: ve.tipoPago==="credito"?"credito":"contado", metodoPago: ve.metodoPago||"efectivo",
-          items: ve.items.map(function(i){ return { producto:i.producto, cantidad:i.cantidad, precio:i.precio }; }) };
+          items: ve.items.map(function(i){ var o = { producto:i.producto, cantidad:i.cantidad, kg:(i.kg||""), precio:i.precio }; if(i.codigo) o.codigo = i.codigo; return o; }) };
         closeOverlay();
         state.tab = "nueva";
         renderTab();
@@ -2549,7 +2570,7 @@
       if(!draft.items[idx]) return;
       draft.items[idx][field] = field==="producto" ? t.value : Number(t.value);
       if(field==="producto") delete draft.items[idx].codigo;
-      var sub = (Number(draft.items[idx].cantidad)||0) * (Number(draft.items[idx].precio)||0);
+      var sub = subtotalItem(draft.items[idx]);
       var subEl = document.getElementById("subtotal-"+idx);
       if(subEl) subEl.textContent = fmt(sub);
       var totalEl = document.getElementById("draft-total");
@@ -2605,7 +2626,7 @@
         draft.items[idx].precio = match.precio;
         var precioInput = document.querySelector('input[data-field="precio"][data-idx="'+idx+'"]');
         if(precioInput) precioInput.value = match.precio;
-        var sub = (Number(draft.items[idx].cantidad)||0) * match.precio;
+        var sub = subtotalItem(draft.items[idx]);
         var subEl = document.getElementById("subtotal-"+idx);
         if(subEl) subEl.textContent = fmt(sub);
         var totalEl = document.getElementById("draft-total");
