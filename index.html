@@ -457,8 +457,24 @@
     }
     return '<span class="pay-tag '+metodoTagClass(v.metodoPago)+'">'+metodoAbrev(v.metodoPago)+'</span>';
   }
-  function abrirDetalleCobros(titulo, ventas){
-    var rows = ventas.length ? ventas.map(notaRowHtml).join("") : '<p class="empty">Sin notas en este periodo.</p>';
+  function cobradoVenta(v, metodo){
+    if(v.tipoPago==="credito"){
+      return abonosEfectivos(v).reduce(function(s,a){ return s + (metodoTagClass(a.metodo)===metodo ? (Number(a.monto)||0) : 0); }, 0);
+    }
+    return (estaPagado(v) && metodoTagClass(v.metodoPago)===metodo) ? Number(v.total)||0 : 0;
+  }
+  function cobradoTotal(ventas, metodo){
+    return ventas.reduce(function(s,v){ return s + cobradoVenta(v, metodo); }, 0);
+  }
+
+  function abrirDetalleCobros(titulo, ventas, metodo){
+    var rows = ventas.length ? ventas.map(function(v){
+      if(!metodo) return notaRowHtml(v);
+      var parcial = v.tipoPago==="credito" && cobradoVenta(v, metodo) < v.total - 0.009;
+      return '<div class="note-row"><div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+(parcial ? ' <span style="color:var(--ink-soft);font-size:11.5px;">(abono de '+fmt(v.total)+')</span>' : '')+'</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;"><span class="pay-tag '+metodoTagClass(metodo)+'">'+metodoAbrev(metodo)+'</span><span class="amt">'+fmt(cobradoVenta(v, metodo))+'</span>'
+        + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div></div>';
+    }).join("") : '<p class="empty">Sin notas en este periodo.</p>';
     var root = document.getElementById("overlay-root");
     root.innerHTML = '<div class="overlay" data-action="cerrar-overlay">'
       + '  <div class="modal">'
@@ -1391,10 +1407,10 @@
       var promedio = mesesConVentas ? totalYear/mesesConVentas : 0;
       var maxIdx = monthTotals.indexOf(Math.max.apply(null, monthTotals));
       var mejorMes = totalYear>0 ? MESES[maxIdx] : "—";
-      var totalEfectivo = ventasYear.filter(function(v){return estaPagado(v) && metodoTagClass(v.metodoPago)==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
-      var totalBanco = ventasYear.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
-      var totalYape = ventasYear.filter(function(v){return estaPagado(v) && v.metodoPago==="yape";}).reduce(function(s,v){return s+v.total;},0);
-      var totalPlin = ventasYear.filter(function(v){return estaPagado(v) && v.metodoPago==="plin";}).reduce(function(s,v){return s+v.total;},0);
+      var totalEfectivo = cobradoTotal(ventasYear, "efectivo");
+      var totalBanco = cobradoTotal(ventasYear, "banco");
+      var totalYape = cobradoTotal(ventasYear, "yape");
+      var totalPlin = cobradoTotal(ventasYear, "plin");
       var totalPorCobrar = ventasYear.filter(estaPendiente).reduce(function(s,v){return s+saldoPendiente(v);},0);
       var svg = barChartSvg(MESES_ABR, monthTotals, "Ingresos por mes");
       var rowsTable = MESES.map(function(m,i){
@@ -1433,10 +1449,10 @@
         .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; })
         .sort(function(a,b){ return (a.creadoEn||0)-(b.creadoEn||0); });
       var totalDia = ventasDia.reduce(function(s,v){return s+v.total;},0);
-      var efvoDia = ventasDia.filter(function(v){return estaPagado(v) && metodoTagClass(v.metodoPago)==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
-      var bcoDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
-      var yapeDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago==="yape";}).reduce(function(s,v){return s+v.total;},0);
-      var plinDia = ventasDia.filter(function(v){return estaPagado(v) && v.metodoPago==="plin";}).reduce(function(s,v){return s+v.total;},0);
+      var efvoDia = cobradoTotal(ventasDia, "efectivo");
+      var bcoDia = cobradoTotal(ventasDia, "banco");
+      var yapeDia = cobradoTotal(ventasDia, "yape");
+      var plinDia = cobradoTotal(ventasDia, "plin");
       var cobrarDia = ventasDia.filter(estaPendiente).reduce(function(s,v){return s+saldoPendiente(v);},0);
       var filaDia = ventasDia.map(function(v){
         var payTag = payTagHtml(v);
@@ -1477,10 +1493,10 @@
       });
       var totalMesW = semanas.reduce(function(s,w){return s+w.total;},0);
       var notasMesW = semanas.reduce(function(s,w){return s+w.notas;},0);
-      var efectivoMesW = ventasMes.filter(function(v){return estaPagado(v) && metodoTagClass(v.metodoPago)==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
-      var bancoMesW = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
-      var yapeMesW = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="yape";}).reduce(function(s,v){return s+v.total;},0);
-      var plinMesW = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="plin";}).reduce(function(s,v){return s+v.total;},0);
+      var efectivoMesW = cobradoTotal(ventasMes, "efectivo");
+      var bancoMesW = cobradoTotal(ventasMes, "banco");
+      var yapeMesW = cobradoTotal(ventasMes, "yape");
+      var plinMesW = cobradoTotal(ventasMes, "plin");
       var porCobrarMesW = ventasMes.filter(estaPendiente).reduce(function(s,v){return s+saldoPendiente(v);},0);
       var svgSemanas = barChartSvg(semanas.map(function(w){return w.desde+"-"+w.hasta;}), semanas.map(function(w){return w.total;}), "Ingresos por semana en "+monthLabel);
       var bodySemanas = semanas.filter(function(w){return w.notas>0;}).map(function(w){
@@ -1515,10 +1531,10 @@
     var totalMes = dayTotals.reduce(function(a,b){return a+b;},0);
     var notasMes = ventasMes.length;
     var promedioDia = notasMes ? totalMes/dayTotals.filter(function(t){return t>0;}).length : 0;
-    var efectivoMes = ventasMes.filter(function(v){return estaPagado(v) && metodoTagClass(v.metodoPago)==="efectivo";}).reduce(function(s,v){return s+v.total;},0);
-    var bancoMes = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="banco";}).reduce(function(s,v){return s+v.total;},0);
-    var yapeMes = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="yape";}).reduce(function(s,v){return s+v.total;},0);
-    var plinMes = ventasMes.filter(function(v){return estaPagado(v) && v.metodoPago==="plin";}).reduce(function(s,v){return s+v.total;},0);
+    var efectivoMes = cobradoTotal(ventasMes, "efectivo");
+    var bancoMes = cobradoTotal(ventasMes, "banco");
+    var yapeMes = cobradoTotal(ventasMes, "yape");
+    var plinMes = cobradoTotal(ventasMes, "plin");
     var porCobrarMes = ventasMes.filter(estaPendiente).reduce(function(s,v){return s+saldoPendiente(v);},0);
     var dayLabels = dayTotals.map(function(_,i){ return String(i+1); });
     var svgDia = barChartSvg(dayLabels, dayTotals, "Ingresos por día en "+monthLabel);
@@ -2335,8 +2351,8 @@
     else if(action==="detalle-metodo"){
       var metodoD = t.getAttribute("data-metodo");
       var poolD = poolResumenPorScope(t.getAttribute("data-scope"));
-      var listaD = poolD.filter(function(v){ return estaPagado(v) && v.metodoPago===metodoD; });
-      abrirDetalleCobros(metodoLabel(metodoD)+" cobrado", listaD);
+      var listaD = poolD.filter(function(v){ return cobradoVenta(v, metodoD) > 0.009; });
+      abrirDetalleCobros(metodoLabel(metodoD)+" cobrado", listaD, metodoD);
     }
     else if(action==="detalle-pendientes"){
       var poolP = poolResumenPorScope(t.getAttribute("data-scope"));
