@@ -306,6 +306,7 @@
   .ticket .it .nm{ min-width:0; overflow-wrap:anywhere; }
   .ticket .it .qp{ color:var(--ink-soft); font-size:11px; }
   .ticket .total{ display:flex; justify-content:space-between; font-size:16px; font-weight:600; margin-top:10px; }
+  .ticket .pago-bloque{ margin-top:8px; padding-top:6px; border-top:1px dashed var(--line); }
   .ticket .foot{ text-align:center; font-size:11px; color:var(--ink-soft); margin-top:14px; }
   .ticket .legal{ text-align:center; font-size:9.5px; color:var(--ink-soft); margin-top:6px; }
   .ticket-actions{ display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap; }
@@ -1839,7 +1840,7 @@
     var base = 40 + filas*5.2;
     var extra = (venta.notas ? 16 : 0) + (state.negocio.telefono ? 5.5 : 0) + (state.negocio.direccion ? 5.5 : 0) + (venta.ubicacion ? 26 : 0) + (logoDataUrl ? 30 : 8);
     var tabla = 14 + venta.items.length*5.6;
-    var pie = 22;
+    var pie = 22 + 2 + pagoLineas(venta).length*5;
     return Math.max(base + extra + tabla + pie, 90);
   }
 
@@ -1862,8 +1863,6 @@
     row("Fecha", fechaDisplay(venta.fecha));
     if(venta.creadoEn) row("Hora", horaDisplay(venta.creadoEn));
     row("Cliente", venta.cliente);
-    if(venta.tipoPago!=="credito") row("Tipo", "Contado");
-    if(estaPagado(venta)) row("Pago", metodoLabel(venta.metodoPago));
     if(venta.vendedor) row("Vendedor", venta.vendedor);
     if(venta.ubicacion){
       y+=1;
@@ -1913,6 +1912,9 @@
     });
     y = tableTop + tableH + 5;
     row("TOTAL", fmt(venta.total));
+    y += 1;
+    doc.setLineWidth(0.1); doc.line(x, y-3, x+w, y-3);
+    pagoLineas(venta).forEach(function(r){ row(r[0], r[1]); });
 
     if(venta.notas){
       y+=2; doc.setFont("courier","normal"); doc.setFontSize(8);
@@ -1985,6 +1987,26 @@
 
   // ---------- ticket & settings overlays ----------
 
+  function pagoLineas(v){
+    var L = [];
+    if(v.tipoPago!=="credito"){
+      L.push(["Pago","Al contado"]);
+      L.push(["Método",metodoLabel(v.metodoPago)]);
+      return L;
+    }
+    var ab = abonosEfectivos(v);
+    if(!ab.length){
+      L.push(["Estado","Pendiente de pago"]);
+      L.push(["Debe el total",fmt(v.total)]);
+      return L;
+    }
+    ab.forEach(function(a){ L.push(["Pagó ("+metodoLabel(a.metodo)+")",fmt(a.monto)]); });
+    var saldo = saldoPendiente(v);
+    if(saldo>0) L.push(["Saldo pendiente",fmt(saldo)]);
+    else L.push(["Estado","Pagado completo"]);
+    return L;
+  }
+
   function estadoPagoHtml(venta){
     var texto;
     if(venta.tipoPago==="credito"){
@@ -2021,19 +2043,17 @@
       + '      <div class="meta"><span>Fecha</span><span>'+fechaDisplay(venta.fecha)+'</span></div>'
       + (venta.creadoEn ? '      <div class="meta"><span>Hora</span><span>'+horaDisplay(venta.creadoEn)+'</span></div>' : '')
       + '      <div class="meta"><span>Cliente</span><span>'+escapeHtml(venta.cliente)+'</span></div>'
-      + (venta.tipoPago!=="credito" ? '      <div class="meta"><span>Tipo</span><span>Contado</span></div>' : '')
-      + (estaPagado(venta) ? '      <div class="meta"><span>Pago</span><span>'+metodoLabel(venta.metodoPago)+'</span></div>' : '')
       + (venta.vendedor ? '      <div class="meta"><span>Vendedor</span><span>'+escapeHtml(venta.vendedor)+'</span></div>' : '')
       + (venta.ubicacion ? '      <div class="ubic-block"><strong>Ubicación:</strong><div id="ticket-direccion">Buscando dirección…</div><a href="'+mapsLink(venta.ubicacion)+'" target="_blank" rel="noopener">Ver en el mapa</a></div>' : '')
       + '      <hr>'
       + itemsHtml
       + '      <hr>'
       + '      <div class="total"><span>Total</span><span>'+fmt(venta.total)+'</span></div>'
+      + '      <div class="pago-bloque">'+pagoLineas(venta).map(function(r){ return '<div class="meta"><span>'+escapeHtml(r[0])+'</span><span>'+escapeHtml(r[1])+'</span></div>'; }).join("")+'</div>'
       + (venta.notas ? '<div class="foot">'+escapeHtml(venta.notas)+'</div>' : '')
       + '      <div class="foot">'+escapeHtml(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!")+'</div>'
       + '      <div class="legal">Documento interno</div>'
       + '    </div>'
-      + estadoPagoHtml(venta)
       + '    <div class="ticket-actions">'
       + '      <button class="btn" data-action="cerrar-overlay">Cerrar</button>'
       + '      <button class="btn" data-action="descargar-pdf-ticket">⬇ Descargar PDF</button>'
