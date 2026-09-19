@@ -344,7 +344,7 @@
     html, body{ width:80mm; margin:0; padding:0; background:#fff !important; }
     .overlay{ padding:0 !important; background:#fff !important; backdrop-filter:none !important; display:block !important; }
     .modal{ box-shadow:none !important; border:none !important; padding:0 !important; max-width:80mm !important; width:80mm !important; border-radius:0 !important; animation:none !important; }
-    .ticket{ width:72mm !important; max-width:72mm !important; margin:0 auto !important; padding:3mm 0 !important; color:#000 !important; background:#fff !important; border-top:none !important; border-bottom:none !important; }
+    .ticket{ width:72mm !important; max-width:72mm !important; margin:0 auto !important; padding:3mm 0 12mm !important; color:#000 !important; background:#fff !important; border-top:none !important; border-bottom:none !important; }
     .ticket *{ color:#000 !important; }
     .ticket .biz-logo{ width:34mm !important; height:34mm !important; margin-bottom:2mm !important; }
     .ticket .biz-sub{ font-size:9pt !important; margin-bottom:1mm !important; }
@@ -1879,7 +1879,7 @@
     // asi la hoja final queda exacta, sin cortes ni espacio en blanco.
     var J = window.jspdf && window.jspdf.jsPDF;
     var probe = new J({ unit:"mm", format:[80, 3000] });
-    return Math.max(drawTicketOnDoc(probe, venta, logoDataUrl, direccionTexto) + 4, 50);
+    return Math.max(drawTicketOnDoc(probe, venta, logoDataUrl, direccionTexto) + 12, 50);
   }
 
   function drawTicketOnDoc(doc, venta, logoDataUrl, direccionTexto){
