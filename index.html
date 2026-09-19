@@ -413,7 +413,7 @@
 
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
   var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: 0, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
-    gateMode: "crear", gateSelectedId: null, gateError: "", soloMisVentas: false,
+    gateMode: "login", gateSelectedId: null, gateError: "", soloMisVentas: false,
     cobrarVista: "pendientes", cobrarBuscar: "", clientesBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
 
   var LS = { ventas:"lr_ventas_v1", productos:"lr_productos_v1", clientes:"lr_clientes_v1", negocio:"lr_negocio_v1", pending:"lr_pending_deletes_v1", usuarios:"lr_usuarios_v1", currentUser:"lr_current_user_v1", lastBackup:"lr_last_backup_v1" };
@@ -788,19 +788,6 @@
     persist("productos");
   }
 
-  function mergeRemoteUsuarios(changes){
-    changes.forEach(function(ch){
-      if(ch.type==="removed"){
-        state.usuarios = state.usuarios.filter(function(u){ return u.id!==ch.doc.id; });
-      } else {
-        var idx = state.usuarios.findIndex(function(u){ return u.id===ch.doc.id; });
-        var data = Object.assign({}, ch.doc.data(), { id:ch.doc.id, _synced:true });
-        if(idx>-1) state.usuarios[idx] = data; else state.usuarios.push(data);
-      }
-    });
-    persist("usuarios");
-  }
-
   function mergeRemoteClientes(changes){
     changes.forEach(function(ch){
       if(ch.type==="removed"){
@@ -904,15 +891,30 @@
         state.db = db;
         state.dbReady = true;
 
-        db.collection("usuarios").orderBy("nombre","asc").limit(200).onSnapshot(function(snap){
-          mergeRemoteUsuarios(snap.docChanges());
-          checkGate();
-        }, function(){});
-
         var datosPrivadosConectados = false;
-        function conectarDatosPrivados(){
+        function conectarDatosPrivados(uid){
           if(datosPrivadosConectados) return;
           datosPrivadosConectados = true;
+
+          // Mi propio perfil (nombre, PIN, rol). Los administradores ademas ven la lista completa.
+          var listaAdminConectada = false;
+          db.doc("usuarios/"+uid).onSnapshot(function(snap){
+            if(!snap.exists){
+              if(currentUser) logout();
+              return;
+            }
+            var yo = Object.assign({}, snap.data(), { id:snap.id, _synced:true });
+            if(esAdmin(yo)){
+              if(!listaAdminConectada){
+                listaAdminConectada = true;
+                db.collection("usuarios").orderBy("nombre","asc").limit(200).onSnapshot(function(ls){
+                  aplicarUsuariosRemotos(ls.docs.map(function(d){ return Object.assign({}, d.data(), { id:d.id, _synced:true }); }), uid);
+                }, function(){});
+              }
+            } else {
+              aplicarUsuariosRemotos([yo], uid);
+            }
+          }, function(){});
 
           db.collection("ventas").orderBy("creadoEn","desc").limit(1000).onSnapshot(function(snap){
             mergeRemoteVentas(snap.docChanges());
@@ -944,7 +946,8 @@
 
         if(firebase.auth){
           firebase.auth().onAuthStateChanged(function(user){
-            if(user) conectarDatosPrivados();
+            if(user) conectarDatosPrivados(user.uid);
+            else if(currentUser) logout();
           });
         }
 
@@ -1096,7 +1099,7 @@
     }
     updateUserBadge();
     if(currentUser){ closeGate(); return; }
-    ui.gateMode = state.usuarios.length ? "elegir" : "crear";
+    ui.gateMode = ui.gateMode==="pin" ? "pin" : "login";
     ui.gateSelectedId = null;
     ui.gateError = "";
     renderGate();
@@ -1105,6 +1108,26 @@
   function closeGate(){
     var root = document.getElementById("overlay-root");
     if(root.querySelector(".gate")) root.innerHTML = "";
+  }
+
+  // Recibe la lista de usuarios que el servidor deja ver a esta sesion y la deja como unica copia local.
+  function aplicarUsuariosRemotos(lista, uid){
+    state.usuarios = lista;
+    persist("usuarios");
+    var yo = lista.find(function(u){ return u.id===uid; });
+    if(currentUser && yo){
+      currentUser = { id:yo.id, nombre:yo.nombre, rol:yo.rol||"vendedor" };
+      try{ localStorage.setItem(LS.currentUser, JSON.stringify(currentUser)); }catch(e){}
+      updateUserBadge();
+      if(state.tab==="clientes" || state.tab==="historial") renderTab();
+    }
+    if(!currentUser) return;
+    checkGate();
+  }
+
+  function emailDeNombre(nombre){
+    var base = String(nombre||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+    return base ? base+"@rutipollo.app" : "";
   }
 
   function firebaseSignIn(email, password){
@@ -1119,9 +1142,13 @@
 
   function logout(){
     currentUser = null;
-    try{ localStorage.removeItem(LS.currentUser); }catch(e){}
-    firebaseSignOut();
-    checkGate();
+    try{ localStorage.removeItem(LS.currentUser); localStorage.removeItem(LS.usuarios); }catch(e){}
+    state.usuarios = [];
+    var recargar = function(){ location.reload(); };
+    if(window.firebase && firebase.auth){
+      try{ firebase.auth().signOut().then(recargar, recargar); return; }catch(e){}
+    }
+    recargar();
   }
 
   function esAdmin(u){ return !!(u && u.rol==="admin"); }
@@ -1146,24 +1173,6 @@
     var root = document.getElementById("overlay-root");
     var logo = state.negocio.logo ? '<img class="gate-logo" src="'+escapeHtml(state.negocio.logo)+'" alt="">' : "";
 
-    if(ui.gateMode === "crear"){
-      root.innerHTML = '<div class="gate">'
-        + logo
-        + '<h1 class="section-title" style="margin:0;">Crea tu usuario</h1>'
-        + '<p class="gate-note">Elige un nombre y un PIN de 4 dígitos. Sirve para identificar quién usa la app en cada nota de venta — no es una contraseña de alta seguridad.</p>'
-        + '<div class="gate-form">'
-        + '  <input id="gate-nombre" type="text" placeholder="Tu nombre" maxlength="40">'
-        + '  <input id="gate-pin1" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="PIN (4 dígitos)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">'
-        + '  <input id="gate-pin2" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Repite el PIN" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">'
-        + '  <div class="pin-error" id="gate-error">'+escapeHtml(ui.gateError)+'</div>'
-        + '  <button class="btn btn-primary" data-action="crear-usuario">Empezar</button>'
-        + '</div>'
-        + '</div>';
-      var nombreEl = document.getElementById("gate-nombre");
-      if(nombreEl) nombreEl.focus();
-      return;
-    }
-
     if(ui.gateMode === "pin"){
       var u = state.usuarios.find(function(x){ return x.id===ui.gateSelectedId; });
       root.innerHTML = '<div class="gate">'
@@ -1173,7 +1182,7 @@
         + '  <input id="gate-pin" class="pin-input" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">'
         + '  <div class="pin-error" id="gate-error">'+escapeHtml(ui.gateError)+'</div>'
         + '  <button class="btn btn-primary" data-action="confirmar-pin">Entrar</button>'
-        + '  <button class="btn btn-sm" data-action="gate-volver">← Elegir otro usuario</button>'
+        + '  <button class="btn btn-sm" data-action="gate-volver">← Entrar con otro usuario</button>'
         + '</div>'
         + '</div>';
       var pinEl = document.getElementById("gate-pin");
@@ -1181,32 +1190,20 @@
       return;
     }
 
-    if(ui.gateMode === "password"){
-      var up = state.usuarios.find(function(x){ return x.id===ui.gateSelectedId; });
-      root.innerHTML = '<div class="gate">'
-        + logo
-        + '<h1 class="section-title" style="margin:0;">Contraseña de '+escapeHtml(up?up.nombre:"")+'</h1>'
-        + '<p class="gate-note">Tu contraseña real, distinta del PIN — protege la información del negocio.</p>'
-        + '<div class="gate-form">'
-        + '  <input id="gate-password" type="password" autocomplete="current-password" placeholder="Contraseña">'
-        + '  <div class="pin-error" id="gate-error">'+escapeHtml(ui.gateError)+'</div>'
-        + '  <button class="btn btn-primary" data-action="confirmar-password">Entrar</button>'
-        + '  <button class="btn btn-sm" data-action="gate-volver">← Elegir otro usuario</button>'
-        + '</div>'
-        + '</div>';
-      var passEl = document.getElementById("gate-password");
-      if(passEl) passEl.focus();
-      return;
-    }
-
+    var ultimo = ""; try{ ultimo = localStorage.getItem("lr_last_name_v1") || ""; }catch(e){}
     root.innerHTML = '<div class="gate">'
       + logo
-      + '<h1 class="section-title" style="margin:0;">¿Quién eres?</h1>'
-      + '<div class="user-grid">' + state.usuarios.map(function(u){
-          return '<button class="user-chip" data-action="gate-elegir" data-id="'+u.id+'" data-initial="'+escapeHtml((u.nombre||"?").trim().charAt(0).toUpperCase())+'">'+escapeHtml(u.nombre)+'</button>';
-        }).join("") + '</div>'
-      + (state.usuarios.length ? '' : '<button class="btn btn-sm" data-action="gate-nuevo-usuario">+ Agregar otro usuario</button>')
+      + '<h1 class="section-title" style="margin:0;">Iniciar sesión</h1>'
+      + '<p class="gate-note">Escribe tu nombre y tu contraseña.</p>'
+      + '<div class="gate-form">'
+      + '  <input id="gate-nombre" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Tu nombre" maxlength="40" value="'+escapeHtml(ui.gateNombre||ultimo)+'">'
+      + '  <input id="gate-password" type="password" autocomplete="current-password" placeholder="Contraseña">'
+      + '  <div class="pin-error" id="gate-error">'+escapeHtml(ui.gateError)+'</div>'
+      + '  <button class="btn btn-primary" data-action="confirmar-login">Entrar</button>'
+      + '</div>'
       + '</div>';
+    var focoEl = document.getElementById((ui.gateNombre||ultimo) ? "gate-password" : "gate-nombre");
+    if(focoEl) focoEl.focus();
   }
 
   // ---------- rendering ----------
@@ -2167,17 +2164,18 @@
       + '    <div class="field"><label for="a-direccion">Dirección / lugar de emisión</label><input id="a-direccion" type="text" placeholder="Ej: Av. Los Pollos 123, Lima" value="'+escapeHtml(n.direccion||"")+'"></div>'
       + '    <div class="field"><label for="a-pie">Mensaje al pie de la nota</label><input id="a-pie" type="text" value="'+escapeHtml(n.pie||"")+'"></div>'
       + '    <div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cancelar</button><button class="btn btn-primary" data-action="guardar-ajustes">Guardar</button></div>'
-      + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
-      + '    <h2 style="font-size:15px;">Usuarios que pueden entrar</h2>'
-      + '    <div style="margin-bottom:12px;">'+userRows+'</div>'
       + (soyAdmin ? ''
+        + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
+        + '    <h2 style="font-size:15px;">Usuarios que pueden entrar</h2>'
+        + '    <div style="margin-bottom:12px;">'+userRows+'</div>'
         + '    <div class="row2">'
-        + '      <input id="nu-nombre" type="text" placeholder="Nombre">'
+        + '      <input id="nu-nombre" type="text" placeholder="Nombre" autocomplete="off">'
         + '      <input id="nu-pin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="PIN (4 dígitos)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">'
         + '    </div>'
+        + '    <div class="field" style="margin-top:8px;"><input id="nu-pass" type="text" placeholder="Contraseña (mínimo 8 caracteres)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></div>'
         + '    <div class="actions-row"><button class="btn btn-sm" data-action="agregar-usuario">+ Agregar usuario</button></div>'
-        + '    <p class="section-sub" style="margin-top:10px;">El PIN identifica a cada persona, no es una contraseña de alta seguridad — cualquiera con el enlace y suficiente esfuerzo técnico podría verlo.</p>'
-        : '    <p class="section-sub" style="margin-top:4px;">Solo un administrador puede agregar o quitar usuarios.</p>')
+        + '    <p class="section-sub" style="margin-top:10px;">La persona entra escribiendo su nombre y esta contraseña, y luego su PIN. Entrégale los datos en privado. Al eliminar un usuario pierde el acceso de inmediato.</p>'
+        : '')
       + '  </div>'
       + '</div>';
   }
@@ -2442,12 +2440,25 @@
       if(!unombre){ alert("Ingresa el nombre del usuario."); return; }
       if(state.usuarios.some(function(u){ return u.nombre.trim().toLowerCase()===unombre.toLowerCase(); })){ alert("Ya existe un usuario con ese nombre."); return; }
       if(!/^\d{4}$/.test(upin)){ alert("El PIN debe tener exactamente 4 dígitos."); return; }
-      saveUsuario({ nombre:unombre, pin:upin, rol:"vendedor" });
-      openAjustes();
+      var upass = document.getElementById("nu-pass").value;
+      if(upass.length < 8){ alert("La contraseña debe tener al menos 8 caracteres."); return; }
+      var umail = emailDeNombre(unombre);
+      if(!umail){ alert("El nombre debe tener letras o números."); return; }
+      // Cuenta nueva en una segunda conexion, para no cerrar la sesion del administrador.
+      var sec = firebase.apps.find(function(a){ return a.name==="alta"; }) || firebase.initializeApp(window.RUTIPOLLO_FIREBASE_CONFIG, "alta");
+      sec.auth().createUserWithEmailAndPassword(umail, upass).then(function(cred){
+        var nuevoUid = cred.user.uid;
+        return sec.auth().signOut().then(function(){
+          saveUsuario({ id:nuevoUid, nombre:unombre, pin:upin, rol:"vendedor", authEmail:umail });
+          openAjustes();
+        });
+      }).catch(function(err){
+        alert(err && err.code==="auth/email-already-in-use" ? "Ya existe una cuenta con ese nombre." : "No se pudo crear el usuario. Revisa tu internet.");
+      });
     }
     else if(action==="eliminar-usuario"){
       if(!esAdmin(currentUser)) return;
-      if(confirm("¿Eliminar este usuario? Ya no podrá entrar con su PIN.")){
+      if(confirm("¿Eliminar este usuario? Perderá el acceso de inmediato.")){
         deleteUsuario(t.getAttribute("data-id"));
         openAjustes();
       }
@@ -2474,55 +2485,44 @@
         renderTab();
       }
     }
-    else if(action==="crear-usuario"){
-      var cNombre = document.getElementById("gate-nombre").value.trim();
-      var cPin1 = document.getElementById("gate-pin1").value.trim();
-      var cPin2 = document.getElementById("gate-pin2").value.trim();
-      if(!cNombre){ ui.gateError = "Ingresa tu nombre."; renderGate(); return; }
-      if(state.usuarios.some(function(u){ return u.nombre.trim().toLowerCase()===cNombre.toLowerCase(); })){ ui.gateError = "Ya existe un usuario '"+cNombre+"'. Vuelve y tócalo en la lista en vez de crear uno nuevo."; renderGate(); return; }
-      if(!/^\d{4}$/.test(cPin1)){ ui.gateError = "El PIN debe tener 4 dígitos."; renderGate(); return; }
-      if(cPin1 !== cPin2){ ui.gateError = "Los PIN no coinciden."; renderGate(); return; }
-      var nu = saveUsuario({ nombre:cNombre, pin:cPin1 });
-      loginAs(nu);
-    }
-    else if(action==="gate-elegir"){
-      ui.gateMode = "pin";
-      ui.gateSelectedId = t.getAttribute("data-id");
-      ui.gateError = "";
+    else if(action==="gate-volver"){ logout(); }
+    else if(action==="confirmar-login"){
+      var nomVal = document.getElementById("gate-nombre").value.trim();
+      var passVal = document.getElementById("gate-password").value;
+      ui.gateNombre = nomVal;
+      var mail = emailDeNombre(nomVal);
+      if(!mail || !passVal){ ui.gateError = "Escribe tu nombre y tu contraseña."; renderGate(); return; }
+      if(!state.db || !window.firebase || !firebase.auth){ ui.gateError = "Sin conexión. Conéctate a internet para iniciar sesión."; renderGate(); return; }
+      ui.gateError = "Verificando…";
       renderGate();
-    }
-    else if(action==="gate-volver"){
-      ui.gateMode = "elegir"; ui.gateSelectedId = null; ui.gateError = "";
-      renderGate();
-    }
-    else if(action==="gate-nuevo-usuario"){
-      ui.gateMode = "crear"; ui.gateError = "";
-      renderGate();
+      firebaseSignIn(mail, passVal).then(function(cred){
+        var uid = cred.user.uid;
+        return state.db.doc("usuarios/"+uid).get().then(function(snap){
+          if(!snap.exists){
+            firebaseSignOut();
+            ui.gateError = "Tu usuario no está autorizado. Habla con un administrador.";
+            renderGate();
+            return;
+          }
+          var yo = Object.assign({}, snap.data(), { id:snap.id, _synced:true });
+          state.usuarios = [yo]; persist("usuarios");
+          try{ localStorage.setItem("lr_last_name_v1", yo.nombre); }catch(e){}
+          ui.gateSelectedId = yo.id; ui.gateMode = "pin"; ui.gateError = ""; ui.gateNombre = "";
+          renderGate();
+        });
+      }).catch(function(err){
+        var code = err && err.code || "";
+        ui.gateError = code==="auth/too-many-requests" ? "Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
+          : code==="auth/network-request-failed" ? "Sin conexión. Revisa tu internet."
+          : "Nombre o contraseña incorrectos.";
+        renderGate();
+      });
     }
     else if(action==="confirmar-pin"){
       var pinVal = document.getElementById("gate-pin").value.trim();
       var su = state.usuarios.find(function(x){ return x.id===ui.gateSelectedId; });
-      if(su && su.pin === pinVal){ ui.gateError = ""; ui.gateMode = "password"; renderGate(); }
+      if(su && su.pin === pinVal){ ui.gateError = ""; loginAs(su); }
       else { ui.gateError = "PIN incorrecto."; renderGate(); }
-    }
-    else if(action==="confirmar-password"){
-      var sp = state.usuarios.find(function(x){ return x.id===ui.gateSelectedId; });
-      var passVal = document.getElementById("gate-password").value;
-      if(!sp || !sp.authEmail){
-        ui.gateError = "Este usuario no tiene contraseña configurada. Pide a un administrador que la cree.";
-        renderGate();
-        return;
-      }
-      if(!passVal){ ui.gateError = "Ingresa tu contraseña."; renderGate(); return; }
-      ui.gateError = "Verificando…";
-      renderGate();
-      firebaseSignIn(sp.authEmail, passVal).then(function(){
-        ui.gateError = "";
-        loginAs(sp);
-      }).catch(function(){
-        ui.gateError = "Contraseña incorrecta.";
-        renderGate();
-      });
     }
   });
 
@@ -2530,9 +2530,9 @@
     if(e.key !== "Enter") return;
     var id = e.target && e.target.id;
     if(id==="gate-pin"){ e.preventDefault(); document.querySelector('[data-action="confirmar-pin"]').click(); }
-    else if(id==="gate-password"){ e.preventDefault(); document.querySelector('[data-action="confirmar-password"]').click(); }
-    else if(id==="gate-pin2" || id==="gate-pin1" || id==="gate-nombre"){ e.preventDefault(); document.querySelector('[data-action="crear-usuario"]').click(); }
-    else if(id==="nu-pin" || id==="nu-nombre"){ e.preventDefault(); document.querySelector('[data-action="agregar-usuario"]').click(); }
+    else if(id==="gate-password"){ e.preventDefault(); document.querySelector('[data-action="confirmar-login"]').click(); }
+    else if(id==="gate-nombre"){ e.preventDefault(); var pw = document.getElementById("gate-password"); if(pw) pw.focus(); }
+    else if(id==="nu-pin" || id==="nu-nombre" || id==="nu-pass"){ e.preventDefault(); document.querySelector('[data-action="agregar-usuario"]').click(); }
   });
 
   document.addEventListener("input", function(e){
