@@ -296,7 +296,9 @@
   .ticket .biz-sub{ text-align:center; font-size:11px; color:var(--ink-soft); margin-bottom:10px; }
   .ticket .doc-title{ text-align:center; font-size:12px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
   .ticket .corr-stamp{ text-align:center; color:var(--accent); font-size:20px; font-weight:600; transform:rotate(-2deg); margin:4px 0 10px; }
-  .ticket .meta{ display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px; }
+  .ticket .meta{ display:flex; justify-content:space-between; gap:10px; font-size:12px; margin-bottom:2px; }
+  .ticket .meta span:first-child{ flex-shrink:0; }
+  .ticket .meta span:last-child{ min-width:0; text-align:right; overflow-wrap:anywhere; }
   .ticket .ubic-block{ font-size:11px; margin:6px 0 2px; padding-top:4px; border-top:1px dashed var(--line); }
   .ticket .ubic-block strong{ display:block; margin-bottom:2px; }
   .ticket .ubic-block div{ color:var(--ink-soft); line-height:1.4; }
@@ -1867,7 +1869,11 @@
     function center(text, size, bold){ doc.setFont("courier", bold?"bold":"normal"); doc.setFontSize(size); doc.text(String(text), x+w/2, y, {align:"center", maxWidth:w}); }
     function row(label, val, size, bold){
       doc.setFont("courier", bold?"bold":"normal"); doc.setFontSize(size||9.5);
-      doc.text(label, x, y); doc.text(String(val), x+w, y, {align:"right", maxWidth:w-24}); y+=5.2;
+      var lw = doc.getTextWidth(label) + 3;
+      var lines = doc.splitTextToSize(String(val), w - lw);
+      doc.text(label, x, y);
+      lines.forEach(function(ln, i){ doc.text(ln, x+w, y + i*4.3, {align:"right"}); });
+      y += 5.2 + (lines.length-1)*4.3;
     }
 
     if(logoDataUrl){
