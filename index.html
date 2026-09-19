@@ -1910,6 +1910,34 @@
     return state.negocio.logo ? loadImageAsDataUrl(state.negocio.logo).catch(function(){ return null; }) : Promise.resolve(null);
   }
 
+  var pdfListo = { id:null, blob:null };
+  function prepararPdfTicket(venta){
+    pdfListo = { id:venta.id||venta.correlativo, blob:null };
+    var clave = pdfListo.id;
+    var dirP = venta.ubicacion ? reverseGeocode(venta.ubicacion) : Promise.resolve(null);
+    Promise.all([conLogoDataUrl(), dirP]).then(function(res){
+      var blob = buildTicketPdfBlob(venta, res[0], res[1]);
+      if(pdfListo.id===clave) pdfListo.blob = blob;
+    }).catch(function(){});
+  }
+
+  function compartirPdfTicket(venta){
+    var nombre = "nota_"+String(venta.correlativo).padStart(6,"0")+".pdf";
+    function enviar(blob){
+      if(!blob){ alert("No se pudo preparar el PDF. Intenta de nuevo en unos segundos."); return; }
+      var file = new File([blob], nombre, { type:"application/pdf" });
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        navigator.share({ files:[file], title:"Nota de venta N° "+String(venta.correlativo).padStart(6,"0") }).catch(function(err){
+          if(err && err.name!=="AbortError") triggerDownload(nombre, blob);
+        });
+      } else {
+        triggerDownload(nombre, blob);
+      }
+    }
+    if(pdfListo.blob && pdfListo.id===(venta.id||venta.correlativo)) enviar(pdfListo.blob);
+    else alert("Preparando el PDF, toca Compartir de nuevo en 2 segundos.");
+  }
+
   function descargarPdfTicket(venta){
     var direccionPromise = venta.ubicacion ? reverseGeocode(venta.ubicacion) : Promise.resolve(null);
     Promise.all([conLogoDataUrl(), direccionPromise]).then(function(res){
@@ -1973,7 +2001,8 @@
       + estadoPagoHtml(venta)
       + '    <div class="ticket-actions">'
       + '      <button class="btn" data-action="cerrar-overlay">Cerrar</button>'
-      + '      <button class="btn btn-primary" data-action="descargar-pdf-ticket">⬇ Descargar PDF</button>'
+      + '      <button class="btn" data-action="descargar-pdf-ticket">⬇ Descargar PDF</button>'
+      + '      <button class="btn btn-primary" data-action="compartir-pdf-ticket">📤 Compartir / Imprimir</button>'
       + '      <button class="btn" data-action="imprimir-ticket">Imprimir</button>'
       + (venta.id && puedeGestionar() ? '      <button class="btn" data-action="editar-venta" data-id="'+venta.id+'">Editar</button>' : '')
       + (venta.id && puedeGestionar() ? '      <button class="btn btn-danger" data-action="eliminar-venta" data-id="'+venta.id+'">Eliminar</button>' : '')
@@ -1981,6 +2010,7 @@
       + '  </div>'
       + '</div>';
 
+    prepararPdfTicket(venta);
     if(venta.ubicacion){
       reverseGeocode(venta.ubicacion).then(function(addr){
         var el = document.getElementById("ticket-direccion");
@@ -2205,6 +2235,7 @@
     }
     else if(action==="cerrar-overlay"){ if(e.target===t || e.target.classList.contains("overlay")) closeOverlay(); }
     else if(action==="imprimir-ticket"){ window.print(); }
+    else if(action==="compartir-pdf-ticket"){ if(currentTicketVenta) compartirPdfTicket(currentTicketVenta); }
     else if(action==="descargar-pdf-ticket"){ if(currentTicketVenta) descargarPdfTicket(currentTicketVenta); }
     else if(action==="abrir-ajustes"){ openAjustes(); }
     else if(action==="guardar-ajustes"){
