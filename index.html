@@ -337,7 +337,21 @@
     .modal{ box-shadow:none !important; border:none !important; padding:0 !important; max-width:80mm !important; width:80mm !important; border-radius:0 !important; animation:none !important; }
     .ticket{ width:72mm !important; max-width:72mm !important; margin:0 auto !important; padding:3mm 0 !important; color:#000 !important; background:#fff !important; border-top:none !important; border-bottom:none !important; }
     .ticket *{ color:#000 !important; }
-    .ticket .biz-logo{ width:38mm !important; height:38mm !important; }
+    .ticket .biz-logo{ width:34mm !important; height:34mm !important; margin-bottom:2mm !important; }
+    .ticket .biz-sub{ font-size:9pt !important; margin-bottom:1mm !important; }
+    .ticket .doc-title{ font-size:10pt !important; }
+    .ticket .corr-stamp{ font-size:15pt !important; transform:none !important; margin:1mm 0 3mm !important; }
+    .ticket .meta{ font-size:9.5pt !important; margin-bottom:1mm !important; gap:3mm; }
+    .ticket .meta span:last-child{ text-align:right; overflow-wrap:anywhere; }
+    .ticket hr{ border-top:1px solid #000 !important; margin:2.5mm 0 !important; }
+    .ticket .it{ font-size:9.5pt !important; margin-bottom:1.8mm !important; gap:3mm !important; }
+    .ticket .it > div:last-child{ white-space:nowrap; font-weight:600; }
+    .ticket .it .qp{ font-size:8.5pt !important; }
+    .ticket .total{ font-size:12pt !important; margin-top:2mm !important; }
+    .ticket .pago-bloque{ border-top:1px solid #000 !important; margin-top:2mm !important; padding-top:2mm !important; }
+    .ticket .foot{ font-size:9pt !important; margin-top:3mm !important; }
+    .ticket .ubic-block{ font-size:8.5pt !important; }
+    .ticket .ubic-block a{ display:none !important; }
     body *{ visibility:hidden; }
     #overlay-root, #overlay-root *{ visibility:visible; }
     #overlay-root{ position:absolute; inset:0; background:#fff !important; padding:0; }
@@ -369,7 +383,7 @@
       <button class="tab-btn active" data-tab="nueva"><span class="ic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span>Nueva venta</span></button>
       <button class="tab-btn" data-tab="historial"><span class="ic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span><span>Historial</span></button>
       <button class="tab-btn" data-tab="resumen"><span class="ic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><span>Resumen</span></button>
-      <button class="tab-btn" data-tab="cobrar"><span class="ic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><span>Por cobrar</span></button>
+      <button class="tab-btn" data-tab="cobrar"><span class="ic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><span>Deudores</span></button>
       <button class="tab-btn" data-tab="productos"><span class="ic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span><span>Productos</span></button>
       <button class="tab-btn" data-tab="clientes"><span class="ic"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span>Clientes</span></button>
     </nav>
@@ -400,7 +414,7 @@
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
   var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: 0, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
     gateMode: "crear", gateSelectedId: null, gateError: "", soloMisVentas: false,
-    cobrarVista: "pendientes", cobrarBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
+    cobrarVista: "pendientes", cobrarBuscar: "", clientesBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
 
   var LS = { ventas:"lr_ventas_v1", productos:"lr_productos_v1", clientes:"lr_clientes_v1", negocio:"lr_negocio_v1", pending:"lr_pending_deletes_v1", usuarios:"lr_usuarios_v1", currentUser:"lr_current_user_v1", lastBackup:"lr_last_backup_v1" };
   var pendingDeletes = { ventas:[], productos:[], clientes:[], usuarios:[] };
@@ -1651,19 +1665,19 @@
 
     if(!pendientes.length){
       return ''
-        + '<h1 class="section-title">Por cobrar</h1>'
-        + '<p class="section-sub">Clientes con saldo pendiente de pago.</p>'
+        + '<h1 class="section-title">Deudores</h1>'
+        + '<p class="section-sub">Clientes que deben. Aquí ves cuánto debe cada uno.</p>'
         + vistaToggle
         + (soloMiosToggleHtml() ? '<div class="toolbar">'+soloMiosToggleHtml()+'</div>' : '')
         + '<p class="empty">No hay cuentas pendientes de cobro. 🎉</p>';
     }
 
     return ''
-      + '<h1 class="section-title">Por cobrar</h1>'
+      + '<h1 class="section-title">Deudores</h1>'
       + '<p class="section-sub">Busca un cliente para ver cuánto debe por mes y día. Al recibir el dinero, pon el monto y toca "Cobrado" con el método: si es todo el saldo, la nota deja de aparecer como pendiente.</p>'
       + vistaToggle
       + '<div class="toolbar">'+soloMiosToggleHtml()+'<span class="mono" style="color:var(--danger);font-weight:600;">Total por cobrar: '+fmt(totalPendiente)+'</span></div>'
-      + '<div class="field" style="max-width:420px;"><label for="cobrar-buscar">Buscar cliente que debe</label><input id="cobrar-buscar" type="search" autocomplete="off" placeholder="Escribe el nombre del cliente" value="'+escapeHtml(ui.cobrarBuscar)+'"></div>'
+      + '<div class="field" style="max-width:420px;"><label for="cobrar-buscar">🔍 Buscar deudor (cliente que debe)</label><input id="cobrar-buscar" type="search" autocomplete="off" placeholder="Escribe el nombre del cliente" value="'+escapeHtml(ui.cobrarBuscar)+'"></div>'
       + '<div id="cobrar-lista">'+cobrarListaHtml(pendientes)+'</div>';
   }
 
@@ -1735,14 +1749,6 @@
 
   function viewClientes(){
     var editing = ui.editingClienteId ? state.clientes.find(function(c){return c.id===ui.editingClienteId;}) : null;
-    var rows = state.clientes.length ? state.clientes.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); }).map(function(c){
-      return '<div class="cliente-row">'
-        + '<div class="cliente-nombre">'+escapeHtml(c.nombre)+'</div>'
-        + (puedeGestionar() ? '<div class="cliente-acciones"><button class="btn btn-sm" data-action="editar-cliente" data-id="'+c.id+'">Editar</button>'
-        + '<button class="btn btn-sm btn-danger" data-action="eliminar-cliente" data-id="'+c.id+'">Eliminar</button></div>' : '')
-        + '</div>';
-    }).join("") : '<p class="empty">Aún no registras clientes.</p>';
-
     return ''
       + '<h1 class="section-title">Clientes</h1>'
       + '<p class="section-sub">Lista de clientes registrados. También se agregan solos al escribir un cliente nuevo en "Nueva venta".</p>'
@@ -1750,7 +1756,27 @@
       + '  <div class="field"><label for="nc-nombre">Nombre del cliente / puesto</label><input id="nc-nombre" type="text" placeholder="Ej: Bodega San José" value="'+(editing?escapeHtml(editing.nombre):"")+'"></div>'
       + '  <div class="actions-row">'+(editing?'<button class="btn" data-action="cancelar-edicion-cliente">Cancelar</button>':'')+'<button class="btn btn-primary" data-action="agregar-cliente" data-id="'+(editing?editing.id:"")+'">'+(editing?"Guardar cambios":"+ Agregar cliente")+'</button></div>'
       + '</div>'
-      + '<div class="card" style="padding:6px 16px;">'+rows+'</div>';
+      + '<div class="field" style="max-width:420px;"><label for="clientes-buscar">Buscar cliente o ver cuánto debe</label><input id="clientes-buscar" type="search" autocomplete="off" placeholder="Escribe el nombre del cliente" value="'+escapeHtml(ui.clientesBuscar||"")+'"></div>'
+      + '<div class="card" style="padding:6px 16px;" id="clientes-lista">'+clientesListaHtml()+'</div>';
+  }
+
+  function clientesListaHtml(){
+    var q = (ui.clientesBuscar||"").trim().toLowerCase();
+    var deuda = {};
+    state.ventas.filter(estaPendiente).forEach(function(v){ deuda[v.cliente] = (deuda[v.cliente]||0) + saldoPendiente(v); });
+    var lista = state.clientes.slice().filter(function(c){ return !q || c.nombre.toLowerCase().indexOf(q)>-1; })
+      .sort(function(a,b){ return ((deuda[b.nombre]||0)>0)-((deuda[a.nombre]||0)>0) || a.nombre.localeCompare(b.nombre); });
+    if(!state.clientes.length) return '<p class="empty">Aún no registras clientes.</p>';
+    if(!lista.length) return '<p class="empty">Ningún cliente coincide con "'+escapeHtml(ui.clientesBuscar)+'".</p>';
+    return lista.map(function(c){
+      var d = deuda[c.nombre]||0;
+      return '<div class="cliente-row">'
+        + '<div class="cliente-nombre">'+escapeHtml(c.nombre)+(d>0.009 ? '<div style="font-size:12.5px;color:var(--danger);font-weight:600;margin-top:2px;">Debe '+fmt(d)+'</div>' : '<div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Sin deuda</div>')+'</div>'
+        + '<div class="cliente-acciones">'
+        + (d>0.009 ? '<button class="btn btn-sm btn-primary" data-action="ver-deuda-cliente" data-nombre="'+escapeHtml(c.nombre)+'">Ver deuda</button>' : '')
+        + (puedeGestionar() ? '<button class="btn btn-sm" data-action="editar-cliente" data-id="'+c.id+'">Editar</button><button class="btn btn-sm btn-danger" data-action="eliminar-cliente" data-id="'+c.id+'">Eliminar</button>' : '')
+        + '</div></div>';
+    }).join("");
   }
 
   // ---------- exportar CSV ----------
@@ -1831,103 +1857,113 @@
     });
   }
 
-  function ticketHeightMm(venta, logoDataUrl){
-    var filas = 2; // Fecha + Cliente
-    if(venta.creadoEn) filas += 1; // Hora
-    if(venta.tipoPago !== "credito") filas += 1; // Tipo
-    if(estaPagado(venta)) filas += 1; // Pago
-    if(venta.vendedor) filas += 1; // Vendedor
-    var base = 40 + filas*5.2;
-    var extra = (venta.notas ? 16 : 0) + (state.negocio.telefono ? 5.5 : 0) + (state.negocio.direccion ? 5.5 : 0) + (venta.ubicacion ? 26 : 0) + (logoDataUrl ? 30 : 8);
-    var tabla = 14 + venta.items.length*5.6;
-    var pie = 22 + 2 + pagoLineas(venta).length*5;
-    return Math.max(base + extra + tabla + pie, 90);
+  function ticketHeightMm(venta, logoDataUrl, direccionTexto){
+    // Se dibuja la nota en una hoja de prueba y se mide hasta donde llego,
+    // asi la hoja final queda exacta, sin cortes ni espacio en blanco.
+    var J = window.jspdf && window.jspdf.jsPDF;
+    var probe = new J({ unit:"mm", format:[80, 3000] });
+    return Math.max(drawTicketOnDoc(probe, venta, logoDataUrl, direccionTexto) + 4, 50);
   }
 
   function drawTicketOnDoc(doc, venta, logoDataUrl, direccionTexto){
     var x = 5, w = 70, y = 5;
     function center(text, size, bold){ doc.setFont("courier", bold?"bold":"normal"); doc.setFontSize(size); doc.text(String(text), x+w/2, y, {align:"center", maxWidth:w}); }
-    function row(label, val){ doc.setFont("courier","normal"); doc.setFontSize(9); doc.text(label, x, y); doc.text(String(val), x+w, y, {align:"right", maxWidth:w-25}); y+=5; }
-    function rule(){ doc.setFont("courier","normal"); doc.setFontSize(9); doc.text("-".repeat(38), x, y); y+=5; }
+    function row(label, val, size, bold){
+      doc.setFont("courier", bold?"bold":"normal"); doc.setFontSize(size||9.5);
+      doc.text(label, x, y); doc.text(String(val), x+w, y, {align:"right", maxWidth:w-24}); y+=5.2;
+    }
 
     if(logoDataUrl){
-      try{ doc.addImage(logoDataUrl, "PNG", x+w/2-13, y, 26, 26); y += 29; }catch(e){}
+      try{ doc.addImage(logoDataUrl, "PNG", x+w/2-13, y, 26, 26); y += 30; }catch(e){}
     } else {
-      center(state.negocio.nombre||"Rico Pollo Dissur", 13, true); y+=6;
+      y += 4; center(state.negocio.nombre||"Rico Pollo Dissur", 13, true); y+=6;
     }
-    if(state.negocio.telefono){ center("Tel. "+state.negocio.telefono, 8, false); y+=5; }
-    if(state.negocio.direccion){ center(state.negocio.direccion, 8, false); y+=5; }
-    center("NOTA DE VENTA", 9, false); y+=6;
-    center("N° "+String(venta.correlativo).padStart(6,"0"), 14, true); y+=8;
+    if(state.negocio.telefono){ center("Tel. "+state.negocio.telefono, 8.5, false); y+=4.6; }
+    if(state.negocio.direccion){ center(state.negocio.direccion, 8.5, false); y+=4.6; }
+    y += 1.4;
+    center("NOTA DE VENTA", 10, false); y+=6.2;
+    center("N° "+String(venta.correlativo).padStart(6,"0"), 15, true); y+=4;
+    doc.setLineWidth(0.1); doc.line(x, y, x+w, y); y += 5;
 
     row("Fecha", fechaDisplay(venta.fecha));
     if(venta.creadoEn) row("Hora", horaDisplay(venta.creadoEn));
     row("Cliente", venta.cliente);
     if(venta.vendedor) row("Vendedor", venta.vendedor);
     if(venta.ubicacion){
-      y+=1;
-      doc.setFont("courier","bold"); doc.setFontSize(8); doc.text("Ubicación:", x, y); y+=3.6;
-      doc.setFont("courier","normal"); doc.setFontSize(7.5);
+      y+=0.5;
+      doc.setFont("courier","bold"); doc.setFontSize(8.5); doc.text("Ubicación:", x, y); y+=3.8;
+      doc.setFont("courier","normal"); doc.setFontSize(8);
       var dirTxt = direccionTexto || (venta.ubicacion.lat.toFixed(5)+", "+venta.ubicacion.lon.toFixed(5));
       var dirLines = doc.splitTextToSize(dirTxt, w);
       doc.text(dirLines, x, y);
-      y += dirLines.length*3.2 + 3;
+      y += dirLines.length*3.4 + 1;
     }
-    y += 1;
-    var cb = [x, x+11, x+38, x+48, x+59, x+w];
-    var headerH = 5.2, rowH = 5.4;
-    var tableTop = y - 3.6;
-    var tableH = headerH + venta.items.length*rowH;
+    y += 1.5;
 
-    doc.setLineWidth(0.18);
+    // Tabla: CÓD | PRODUCTO | UND | P.UNIT | TOTAL
+    var cb = [x, x+11, x+35, x+44, x+56, x+w];
+    var headerH = 5.8, fs = 7.5, lh = 3.3, cap = 1.9;
+    var tableTop = y;
+    var nomW = cb[2]-cb[1]-2.4;
+    doc.setFont("courier","normal"); doc.setFontSize(fs);
+    var filas = venta.items.map(function(it){
+      var lines = doc.splitTextToSize(String(it.producto), nomW);
+      if(lines.length > 3) lines = lines.slice(0,3);
+      return { it: it, lines: lines, h: Math.max(6, lines.length*lh + 2.6) };
+    });
+    var tableH = headerH + filas.reduce(function(a,f){ return a+f.h; }, 0);
+
+    doc.setLineWidth(0.2);
     doc.rect(x, tableTop, w, tableH);
     for(var ci=1; ci<cb.length-1; ci++){ doc.line(cb[ci], tableTop, cb[ci], tableTop+tableH); }
     doc.line(x, tableTop+headerH, x+w, tableTop+headerH);
 
-    doc.setFont("courier","bold"); doc.setFontSize(6.3);
-    doc.text("CÓD", cb[0]+1.2, y);
-    doc.text("PRODUCTO", cb[1]+1.2, y);
-    doc.text("UND", cb[3]-1.2, y, {align:"right"});
-    doc.text("P.UNIT", cb[4]-1.2, y, {align:"right"});
-    doc.text("TOTAL", cb[5]-1.2, y, {align:"right"});
-    y += headerH;
+    var hy = tableTop + headerH/2 + 1.1;
+    doc.setFont("courier","bold"); doc.setFontSize(6.8);
+    doc.text("CÓD", cb[0]+1.2, hy);
+    doc.text("PRODUCTO", cb[1]+1.2, hy);
+    doc.text("UND", cb[3]-1.2, hy, {align:"right"});
+    doc.text("P.UNIT", cb[4]-1.2, hy, {align:"right"});
+    doc.text("TOTAL", cb[5]-1.2, hy, {align:"right"});
 
-    doc.setFont("courier","normal");
-    venta.items.forEach(function(it, idx){
-      var cod = codigoItem(it) || "-";
-      var budget = 15;
-      var nombre = it.producto.length > budget ? it.producto.substring(0, budget-1)+"…" : it.producto;
-      var ty = y - 1.7;
-      doc.setFontSize(7);
-      doc.text(cod, cb[0]+1.2, ty);
-      doc.text(nombre, cb[1]+1.2, ty);
+    doc.setFont("courier","normal"); doc.setFontSize(fs);
+    var ry = tableTop + headerH;
+    filas.forEach(function(f, idx){
+      var it = f.it;
+      var textH = cap + (f.lines.length-1)*lh;
+      var ty = ry + (f.h - textH)/2 + cap;
+      doc.setFontSize(fs);
+      doc.text(codigoItem(it) || "-", cb[0]+1.2, ty);
+      doc.text(f.lines, cb[1]+1.2, ty, {lineHeightFactor: lh/(fs*0.3528)});
       doc.text(String(it.cantidad), cb[3]-1.2, ty, {align:"right"});
       doc.text(Number(it.precio).toFixed(2), cb[4]-1.2, ty, {align:"right"});
       doc.text(Number(it.cantidad*it.precio).toFixed(2), cb[5]-1.2, ty, {align:"right"});
-      y += rowH;
-      if(idx < venta.items.length-1){
-        var lineY = tableTop+headerH+(idx+1)*rowH;
-        doc.line(x, lineY, x+w, lineY);
-      }
+      ry += f.h;
+      if(idx < filas.length-1) doc.line(x, ry, x+w, ry);
     });
-    y = tableTop + tableH + 5;
-    row("TOTAL", fmt(venta.total));
-    y += 1;
-    doc.setLineWidth(0.1); doc.line(x, y-3, x+w, y-3);
+    y = tableTop + tableH + 7;
+    row("TOTAL", fmt(venta.total), 11, true);
+    y += 0.5;
+    doc.setLineWidth(0.1); doc.line(x, y-3.4, x+w, y-3.4); y += 1;
     pagoLineas(venta).forEach(function(r){ row(r[0], r[1]); });
 
     if(venta.notas){
-      y+=2; doc.setFont("courier","normal"); doc.setFontSize(8);
-      doc.text(doc.splitTextToSize(venta.notas, w), x, y); y+=10;
+      y+=1.5; doc.setFont("courier","normal"); doc.setFontSize(8.5);
+      var nl = doc.splitTextToSize(venta.notas, w);
+      doc.text(nl, x, y); y += nl.length*3.6;
     }
-    y+=3; center(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!", 8, false); y+=5;
-    center("Documento interno", 7, false);
+    y += 3;
+    doc.setFont("courier","normal"); doc.setFontSize(8.5);
+    var pieLines = doc.splitTextToSize(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!", w);
+    doc.text(pieLines, x+w/2, y, {align:"center"});
+    y += pieLines.length*3.8;
+    return y;
   }
 
   function buildTicketPdfBlob(venta, logoDataUrl, direccionTexto){
     var jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
     if(!jsPDFCtor) return null;
-    var doc = new jsPDFCtor({ unit:"mm", format:[80, ticketHeightMm(venta, logoDataUrl)] });
+    var doc = new jsPDFCtor({ unit:"mm", format:[80, ticketHeightMm(venta, logoDataUrl, direccionTexto)] });
     drawTicketOnDoc(doc, venta, logoDataUrl, direccionTexto);
     return doc.output("blob");
   }
@@ -1935,9 +1971,9 @@
   function buildMultiTicketPdfBlob(ventas, logoDataUrl, direcciones){
     var jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
     if(!jsPDFCtor || !ventas.length) return null;
-    var doc = new jsPDFCtor({ unit:"mm", format:[80, ticketHeightMm(ventas[0], logoDataUrl)] });
+    var doc = new jsPDFCtor({ unit:"mm", format:[80, ticketHeightMm(ventas[0], logoDataUrl, direcciones && direcciones[0])] });
     ventas.forEach(function(v, i){
-      if(i>0) doc.addPage([80, ticketHeightMm(v, logoDataUrl)]);
+      if(i>0) doc.addPage([80, ticketHeightMm(v, logoDataUrl, direcciones && direcciones[i])]);
       drawTicketOnDoc(doc, v, logoDataUrl, direcciones && direcciones[i]);
     });
     return doc.output("blob");
@@ -2052,7 +2088,6 @@
       + '      <div class="pago-bloque">'+pagoLineas(venta).map(function(r){ return '<div class="meta"><span>'+escapeHtml(r[0])+'</span><span>'+escapeHtml(r[1])+'</span></div>'; }).join("")+'</div>'
       + (venta.notas ? '<div class="foot">'+escapeHtml(venta.notas)+'</div>' : '')
       + '      <div class="foot">'+escapeHtml(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!")+'</div>'
-      + '      <div class="legal">Documento interno</div>'
       + '    </div>'
       + '    <div class="ticket-actions">'
       + '      <button class="btn" data-action="cerrar-overlay">Cerrar</button>'
@@ -2391,6 +2426,7 @@
       abrirDetallePendientes(poolP.filter(estaPendiente));
     }
     else if(action==="resumen-vista"){ ui.resumenVista = t.getAttribute("data-vista"); renderTab(); }
+    else if(action==="ver-deuda-cliente"){ ui.cobrarBuscar = t.getAttribute("data-nombre")||""; ui.cobrarVista = "pendientes"; state.tab = "cobrar"; renderTab(); }
     else if(action==="cobrar-vista"){ ui.cobrarVista = t.getAttribute("data-vista"); renderTab(); }
     else if(action==="cobrar-year-prev"){ ui.cobrarYear--; renderTab(); }
     else if(action==="cobrar-year-next"){ ui.cobrarYear++; renderTab(); }
@@ -2515,6 +2551,11 @@
       if(field==="producto") showProductoSuggestions(idx, t.value);
     }
     else if(t.id==="f-cliente"){ showClienteSuggestions(t.value); }
+    else if(t.id==="clientes-buscar"){
+      ui.clientesBuscar = t.value;
+      var contC = document.getElementById("clientes-lista");
+      if(contC) contC.innerHTML = clientesListaHtml();
+    }
     else if(t.id==="cobrar-buscar"){
       ui.cobrarBuscar = t.value;
       var cont = document.getElementById("cobrar-lista");
