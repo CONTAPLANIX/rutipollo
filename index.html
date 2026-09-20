@@ -2157,9 +2157,11 @@
       + '      <div class="foot">'+pieLineas().map(escapeHtml).join("<br>")+'</div>'
       + '    </div>'
       + '    <div class="ticket-actions">'
+      + '      <div id="bt-status" class="section-sub" style="width:100%;text-align:center;margin:0;min-height:1em;"></div>'
       + '      <button class="btn" data-action="cerrar-overlay">Cerrar</button>'
       + '      <button class="btn" data-action="descargar-pdf-ticket">⬇ Descargar PDF</button>'
       + '      <button class="btn btn-primary" data-action="compartir-pdf-ticket">📤 Compartir / Imprimir</button>'
+      + '      <button class="btn btn-primary" data-action="imprimir-directo">🖨 Imprimir directo</button>'
       + '      <button class="btn" data-action="imprimir-ticket">Imprimir</button>'
       + (venta.id && puedeGestionar() ? '      <button class="btn" data-action="editar-venta" data-id="'+venta.id+'">Editar</button>' : '')
       + (venta.id && puedeGestionar() ? '      <button class="btn btn-danger" data-action="eliminar-venta" data-id="'+venta.id+'">Eliminar</button>' : '')
@@ -2228,6 +2230,254 @@
     });
   }
 
+  // ---------- impresion directa por Bluetooth (BLE) a la impresora termica de 80 mm ----------
+  // La nota se dibuja en un canvas (mismo diseño del PDF), se convierte a puntos blanco/negro (203 dpi)
+  // y se envia a la impresora con CPCL o TSPL. No necesita la app del fabricante ni modo recibo.
+
+  var BT_SERVICIOS = [0xff00, 0xffe0, 0xfff0, 0xfee7, 0x18f0, 0xae30, 0xaf30, 0xff12, 0xfe59, 0xffb0, 0xfea0,
+    "49535343-fe7d-4ae5-8fa9-9fafd205e455", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"];
+  var btPrinter = { device:null, char:null };
+  var BT_KEY_LANG = "lr_printer_lang_v1";
+  function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return v==="TSPL" ? "TSPL" : "CPCL"; }
+
+  function btDisponible(){ return !!(navigator.bluetooth && navigator.bluetooth.requestDevice); }
+
+  function btMensajeNoDisponible(){
+    var ios = /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    return ios
+      ? "Safari en iPhone no permite conectarse a impresoras Bluetooth desde una página web.\n\nSolución: instala gratis el navegador \"Bluefy\" (App Store), abre Rutipollo desde ahí (contaplanix.github.io/rutipollo/), inicia sesión y toca \"Imprimir directo\"."
+      : "Este navegador no permite Bluetooth desde la página. Abre Rutipollo en Google Chrome (Android) y vuelve a intentar.";
+  }
+
+  function btEstado(txt){
+    var el = document.getElementById("bt-status");
+    if(el) el.textContent = txt || "";
+    var el2 = document.getElementById("bt-status-ajustes");
+    if(el2) el2.textContent = txt || "";
+  }
+
+  function btConectar(){
+    if(btPrinter.char && btPrinter.device && btPrinter.device.gatt && btPrinter.device.gatt.connected) return Promise.resolve(btPrinter.char);
+    var pedir = btPrinter.device ? Promise.resolve(btPrinter.device)
+      : navigator.bluetooth.requestDevice({ acceptAllDevices:true, optionalServices:BT_SERVICIOS });
+    return pedir.then(function(dev){
+      btPrinter.device = dev;
+      dev.addEventListener("gattserverdisconnected", function(){ btPrinter.char = null; });
+      btEstado("Conectando con "+(dev.name||"la impresora")+"…");
+      return dev.gatt.connect();
+    }).then(function(server){
+      return server.getPrimaryServices();
+    }).then(function(servicios){
+      var elegido = null;
+      return servicios.reduce(function(prev, svc){
+        return prev.then(function(){
+          if(elegido) return;
+          return svc.getCharacteristics().then(function(chs){
+            var c = chs.find(function(ch){ return ch.properties.writeWithoutResponse; }) || chs.find(function(ch){ return ch.properties.write; });
+            if(c) elegido = c;
+          }).catch(function(){});
+        });
+      }, Promise.resolve()).then(function(){
+        if(!elegido) throw new Error("La impresora no expone un canal de escritura conocido.");
+        btPrinter.char = elegido;
+        return elegido;
+      });
+    });
+  }
+
+  function btEnviar(ch, bytes){
+    var chunk = 180, i = 0;
+    var sinResp = !!ch.properties.writeWithoutResponse && !!ch.writeValueWithoutResponse;
+    var total = bytes.length;
+    function esperar(){ return new Promise(function(r){ setTimeout(r, sinResp ? 12 : 0); }); }
+    function paso(){
+      if(i >= total) return Promise.resolve();
+      var parte = bytes.slice(i, i+chunk);
+      var w = sinResp ? ch.writeValueWithoutResponse(parte) : ch.writeValue(parte);
+      return w.then(function(){
+        i += parte.length;
+        btEstado("Enviando… "+Math.round(i*100/total)+"%");
+        return esperar();
+      }, function(e){
+        if(chunk > 20){ chunk = chunk > 100 ? 100 : 20; return null; }
+        throw e;
+      }).then(paso);
+    }
+    return paso();
+  }
+
+  // Un "doc" de canvas con la misma interfaz minima que usa drawTicketOnDoc (jsPDF), en milimetros.
+  function CanvasDoc(anchoMm, altoMm){
+    this.k = 8; // puntos por mm (203 dpi)
+    this.c = document.createElement("canvas");
+    this.c.width = Math.round(anchoMm * this.k);
+    this.c.height = Math.max(1, Math.round(altoMm * this.k));
+    this.ctx = this.c.getContext("2d");
+    this.ctx.fillStyle = "#fff"; this.ctx.fillRect(0, 0, this.c.width, this.c.height);
+    this.ctx.fillStyle = "#000"; this.ctx.strokeStyle = "#000"; this.ctx.textBaseline = "alphabetic";
+    this.size = 9; this.bold = false; this.lw = 0.2; this.logoImg = null; this.imgs = [];
+  }
+  CanvasDoc.prototype = {
+    setFont: function(n, st){ this.bold = st === "bold"; return this; },
+    setFontSize: function(pt){ this.size = pt; return this; },
+    setLineWidth: function(w){ this.lw = w; return this; },
+    _font: function(){
+      this.ctx.font = (this.bold ? "bold " : "") + (this.size * 25.4 / 72 * this.k) + 'px "Courier New", "Liberation Mono", Courier, monospace';
+    },
+    getTextWidth: function(t){ this._font(); return this.ctx.measureText(String(t)).width / this.k; },
+    splitTextToSize: function(t, maxW){
+      var self = this, out = [];
+      String(t).split("\n").forEach(function(par){
+        var words = par.split(/\s+/).filter(Boolean), cur = "";
+        words.forEach(function(w){
+          var prueba = cur ? cur + " " + w : w;
+          if(!cur || self.getTextWidth(prueba) <= maxW) cur = prueba; else { out.push(cur); cur = w; }
+        });
+        out.push(cur);
+      });
+      return out;
+    },
+    text: function(t, x, y, o){
+      o = o || {};
+      this._font();
+      var self = this, ctx = this.ctx, k = this.k;
+      var lines = Array.isArray(t) ? t : String(t).split("\n");
+      if(o.maxWidth && !Array.isArray(t)) lines = this.splitTextToSize(String(t), o.maxWidth);
+      var paso = this.size * 25.4 / 72 * (o.lineHeightFactor || 1.15);
+      ctx.textAlign = o.align === "right" ? "right" : (o.align === "center" ? "center" : "left");
+      lines.forEach(function(l, i){ ctx.fillText(String(l), x * k, (y + i * paso) * k); });
+    },
+    line: function(x1, y1, x2, y2){
+      var ctx = this.ctx, k = this.k;
+      ctx.lineWidth = Math.max(1, Math.round(this.lw * k));
+      ctx.beginPath(); ctx.moveTo(x1 * k, y1 * k); ctx.lineTo(x2 * k, y2 * k); ctx.stroke();
+    },
+    rect: function(x, y, w, h){
+      var ctx = this.ctx, k = this.k;
+      ctx.lineWidth = Math.max(1, Math.round(this.lw * k));
+      ctx.strokeRect(x * k, y * k, w * k, h * k);
+    },
+    addImage: function(src, fmt, x, y, w, h){
+      if(!this.logoImg) return;
+      var k = this.k;
+      this.ctx.drawImage(this.logoImg, x * k, y * k, w * k, h * k);
+      this.imgs.push({ x:Math.round(x*k), y:Math.round(y*k), w:Math.round(w*k), h:Math.round(h*k) });
+    }
+  };
+
+  var BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+
+  // Recorta 72 mm centrados (576 puntos) y pasa a 1 bit por punto (1 = negro). El logo se tramea; el texto se umbraliza.
+  function canvasABits(cd){
+    var W = 576, x0 = Math.floor((cd.c.width - W) / 2), H = cd.c.height, bpr = W / 8;
+    var data = cd.ctx.getImageData(x0, 0, W, H).data;
+    var bits = new Uint8Array(bpr * H);
+    var esLogo = function(px, py){
+      for(var i = 0; i < cd.imgs.length; i++){
+        var r = cd.imgs[i];
+        if(px + x0 >= r.x && px + x0 < r.x + r.w && py >= r.y && py < r.y + r.h) return true;
+      }
+      return false;
+    };
+    for(var yy = 0; yy < H; yy++){
+      for(var xx = 0; xx < W; xx++){
+        var p = (yy * W + xx) * 4;
+        var lum = 0.299 * data[p] + 0.587 * data[p+1] + 0.114 * data[p+2];
+        var umbral = 150;
+        if(cd.imgs.length && esLogo(xx, yy)) umbral = (BAYER4[yy % 4][xx % 4] + 0.5) / 16 * 255;
+        if(lum < umbral) bits[yy * bpr + (xx >> 3)] |= (0x80 >> (xx & 7));
+      }
+    }
+    return { bits:bits, w:W, h:H, bpr:bpr };
+  }
+
+  function ascii(s){ var a = new Uint8Array(s.length); for(var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; }
+  function unir(partes){
+    var n = 0; partes.forEach(function(p){ n += p.length; });
+    var out = new Uint8Array(n), o = 0;
+    partes.forEach(function(p){ out.set(p, o); o += p.length; });
+    return out;
+  }
+
+  function comandoImpresion(r, lang){
+    if(lang === "TSPL"){
+      var inv = new Uint8Array(r.bits.length);
+      for(var i = 0; i < r.bits.length; i++) inv[i] = r.bits[i] ^ 0xff; // en TSPL 0 = negro
+      var mm = Math.ceil(r.h / 8);
+      return unir([
+        ascii("SIZE 80 mm,"+mm+" mm\r\nGAP 0 mm,0 mm\r\nDIRECTION 0\r\nCLS\r\nBITMAP 32,0,"+r.bpr+","+r.h+",0,"),
+        inv,
+        ascii("\r\nPRINT 1,1\r\n")
+      ]);
+    }
+    return unir([
+      ascii("! 0 200 200 "+r.h+" 1\r\nPAGE-WIDTH "+r.w+"\r\nCG "+r.bpr+" "+r.h+" 0 0 "),
+      r.bits,
+      ascii("\r\nFORM\r\nPRINT\r\n")
+    ]);
+  }
+
+  function cargarImagen(src){
+    return new Promise(function(res){
+      if(!src){ res(null); return; }
+      var im = new Image();
+      im.onload = function(){ res(im); };
+      im.onerror = function(){ res(null); };
+      im.src = src;
+    });
+  }
+
+  // Dibuja la nota en un canvas: primero se mide, luego se dibuja con el alto exacto.
+  function notaACanvasDoc(venta, logoImg, direccionTexto){
+    var medida = new CanvasDoc(80, 10); medida.logoImg = logoImg;
+    var alto = drawTicketOnDoc(medida, venta, logoImg ? "logo" : null, direccionTexto) + 12;
+    var cd = new CanvasDoc(80, alto); cd.logoImg = logoImg;
+    drawTicketOnDoc(cd, venta, logoImg ? "logo" : null, direccionTexto);
+    return cd;
+  }
+
+  function enviarAImpresora(cd){
+    var r = canvasABits(cd);
+    var bytes = comandoImpresion(r, btLang());
+    return btConectar().then(function(ch){ return btEnviar(ch, bytes); }).then(function(){ btEstado("Enviado a la impresora ✓"); });
+  }
+
+  function btErrorTexto(e){
+    var m = (e && e.message) || String(e);
+    if(e && e.name === "NotFoundError") return "No elegiste ninguna impresora.";
+    if(e && e.name === "SecurityError") return "El navegador bloqueó el Bluetooth.";
+    return m;
+  }
+
+  function imprimirDirecto(venta){
+    if(!btDisponible()){ alert(btMensajeNoDisponible()); return; }
+    btEstado("Preparando la nota…");
+    var dirP = venta.ubicacion ? reverseGeocode(venta.ubicacion) : Promise.resolve(null);
+    Promise.all([conLogoDataUrl().then(cargarImagen), dirP]).then(function(res){
+      var cd = notaACanvasDoc(venta, res[0], res[1]);
+      return enviarAImpresora(cd);
+    }).catch(function(e){
+      btEstado("");
+      if(e && e.name === "NotFoundError") return;
+      alert("No se pudo imprimir: "+btErrorTexto(e));
+    });
+  }
+
+  function probarImpresora(){
+    if(!btDisponible()){ alert(btMensajeNoDisponible()); return; }
+    var cd = new CanvasDoc(80, 46);
+    cd.setFont("courier", "bold").setFontSize(12); cd.text("PRUEBA DE IMPRESORA", 40, 10, { align:"center" });
+    cd.setFont("courier", "normal").setFontSize(9); cd.text("Rico Pollo Dissur", 40, 17, { align:"center" });
+    cd.text("Lenguaje: "+btLang()+"  |  80 mm", 40, 23, { align:"center" });
+    cd.setLineWidth(0.3); cd.rect(5, 27, 70, 12);
+    cd.text("Si lees esto, esta bien", 40, 34.5, { align:"center" });
+    enviarAImpresora(cd).catch(function(e){
+      btEstado("");
+      if(e && e.name === "NotFoundError") return;
+      alert("No se pudo imprimir: "+btErrorTexto(e));
+    });
+  }
+
   function addDaysISO(iso, days){
     var p = iso.split("-").map(Number);
     var d = new Date(Date.UTC(p[0], p[1]-1, p[2]));
@@ -2286,6 +2536,12 @@
       + '    <div class="field"><label for="a-direccion">Dirección / lugar de emisión</label><input id="a-direccion" type="text" placeholder="Ej: Av. Los Pollos 123, Lima" value="'+escapeHtml(n.direccion||"")+'"></div>'
       + '    <div class="field"><label for="a-pie">Mensaje al pie de la nota</label><input id="a-pie" type="text" value="'+escapeHtml(n.pie||"")+'"></div>'
       + '    <div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cancelar</button><button class="btn btn-primary" data-action="guardar-ajustes">Guardar</button></div>'
+      + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
+      + '    <h2 style="font-size:15px;">Impresora Bluetooth</h2>'
+      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL (recomendado)</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
+      + '    <div class="actions-row" style="justify-content:flex-start;margin-top:8px;"><button class="btn btn-sm" data-action="bt-probar">🖨 Hoja de prueba</button></div>'
+      + '    <p class="section-sub" id="bt-status-ajustes" style="margin:8px 0 0;min-height:1em;"></p>'
+      + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si no imprime, cambia el lenguaje a TSPL y prueba de nuevo. En iPhone se usa el navegador Bluefy.</p>'
       + (soyAdmin ? ''
         + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
         + '    <h2 style="font-size:15px;">Usuarios que pueden entrar</h2>'
@@ -2445,6 +2701,8 @@
     }
     else if(action==="cerrar-overlay"){ if(e.target===t || e.target.classList.contains("overlay")) closeOverlay(); }
     else if(action==="imprimir-ticket"){ imprimirTicketAjustado(); }
+    else if(action==="imprimir-directo"){ if(currentTicketVenta) imprimirDirecto(currentTicketVenta); }
+    else if(action==="bt-probar"){ probarImpresora(); }
     else if(action==="compartir-pdf-ticket"){ if(currentTicketVenta) compartirPdfTicket(currentTicketVenta); }
     else if(action==="descargar-pdf-ticket"){ if(currentTicketVenta) descargarPdfTicket(currentTicketVenta); }
     else if(action==="abrir-ajustes"){ openAjustes(); }
@@ -2717,6 +2975,7 @@
         btn.disabled = n===0;
       }
     }
+    else if(t.id==="bt-lang"){ try{ localStorage.setItem(BT_KEY_LANG, t.value); }catch(e){} }
     else if(t.id==="hist-year"){ ui.historialYear = Number(t.value); ui.selectMode=false; ui.selected={}; renderTab(); }
     else if(t.id==="resumen-dia-picker"){ ui.resumenDiaSel = t.value; renderTab(); }
     else if(t.classList && t.classList.contains("item-input") && t.getAttribute("data-field")==="producto"){
