@@ -462,6 +462,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
+  var APP_VERSION = "20 sep · v7";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2239,7 +2240,7 @@
     "49535343-fe7d-4ae5-8fa9-9fafd205e455", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"]);
   var btPrinter = { device:null, char:null };
   var BT_KEY_LANG = "lr_printer_lang_v1";
-  function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return (v==="TSPL" || v==="CPCL") ? v : "ESCPOS"; }
+  function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2") ? v : "ESCPOS"; }
 
   function btDisponible(){ return !!(navigator.bluetooth && navigator.bluetooth.requestDevice); }
 
@@ -2478,6 +2479,24 @@
       partes.push(new Uint8Array([0x1b, 0x64, 0x04]));
       return unir(partes);
     }
+    if(lang === "ESCPOS2"){
+      // Modo recibo antiguo (ESC *): franjas de 24 puntos en formato columna. Lo aceptan casi todas las impresoras.
+      var out = [new Uint8Array([0x1b, 0x40, 0x1b, 0x61, 0x00, 0x1b, 0x33, 0x18])];
+      for(var y0 = 0; y0 < r.h; y0 += 24){
+        var cab = new Uint8Array([0x1b, 0x2a, 0x21, r.w & 255, (r.w >> 8) & 255]);
+        var cuerpo = new Uint8Array(r.w * 3);
+        for(var xx = 0; xx < r.w; xx++){
+          for(var k = 0; k < 24; k++){
+            var yy = y0 + k;
+            if(yy >= r.h) break;
+            if(r.bits[yy * r.bpr + (xx >> 3)] & (0x80 >> (xx & 7))) cuerpo[xx * 3 + (k >> 3)] |= (0x80 >> (k & 7));
+          }
+        }
+        out.push(cab, cuerpo, new Uint8Array([0x0a]));
+      }
+      out.push(new Uint8Array([0x1b, 0x32, 0x1b, 0x64, 0x04]));
+      return unir(out);
+    }
     if(lang === "TSPL"){
       var inv = new Uint8Array(r.bits.length);
       for(var i = 0; i < r.bits.length; i++) inv[i] = r.bits[i] ^ 0xff; // en TSPL 0 = negro
@@ -2617,11 +2636,11 @@
       + '    <div class="field"><label for="a-pie">Mensaje al pie de la nota</label><input id="a-pie" type="text" value="'+escapeHtml(n.pie||"")+'"></div>'
       + '    <div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cancelar</button><button class="btn btn-primary" data-action="guardar-ajustes">Guardar</button></div>'
       + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
-      + '    <h2 style="font-size:15px;">Impresora Bluetooth</h2>'
-      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
+      + '    <h2 style="font-size:15px;">Impresora Bluetooth <span class="pay-tag efectivo" style="font-weight:400;">versión '+APP_VERSION+'</span></h2>'
+      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo ESC/POS compatible</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
       + '    <div class="actions-row" style="justify-content:flex-start;margin-top:8px;"><button class="btn btn-sm" data-action="bt-probar">🖨 Hoja de prueba</button></div>'
       + '    <p class="section-sub" id="bt-status-ajustes" style="margin:8px 0 0;min-height:1em;"></p>'
-      + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si sale texto raro, cambia el lenguaje y prueba de nuevo. En iPhone se usa el navegador Bluefy.</p>'
+      + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si sale texto raro, prueba en este orden: Recibo ESC/POS → ESC/POS compatible → TSPL. En iPhone se usa el navegador Bluefy.</p>'
       + (soyAdmin ? ''
         + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
         + '    <h2 style="font-size:15px;">Usuarios que pueden entrar</h2>'
