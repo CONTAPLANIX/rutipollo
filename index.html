@@ -316,10 +316,10 @@
   .ticket .ubic-block div{ color:var(--ink-soft); line-height:1.4; }
   .ticket .ubic-block a{ display:inline-block; margin-top:3px; font-size:10.5px; color:var(--accent); }
   .ticket hr{ border:none; border-top:1px dashed var(--line); margin:10px 0; }
-  .ticket table.tk-items{ width:100%; min-width:0; border-collapse:collapse; table-layout:fixed; margin:3px 0 4px; font-size:10px; border:1px solid var(--ink); }
+  .ticket table.tk-items{ width:100%; min-width:0; border-collapse:collapse; table-layout:fixed; margin:3px 0 4px; font-size:10px; border:none; border-bottom:1px solid var(--ink); }
   .ticket .tk-moneda{ font-size:10.5px; font-weight:700; margin-top:10px; }
-  .ticket .tk-items th, .ticket .tk-items td{ border:1px solid var(--ink); padding:4px 3px; text-align:right; vertical-align:middle; background:transparent; white-space:nowrap; letter-spacing:0; text-transform:none; color:var(--ink); }
-  .ticket .tk-items th{ font-size:9px; font-weight:700; text-transform:uppercase; }
+  .ticket .tk-items th, .ticket .tk-items td{ border:none; padding:4px 2px; text-align:right; vertical-align:middle; background:transparent; white-space:nowrap; letter-spacing:0; text-transform:none; color:var(--ink); }
+  .ticket .tk-items th{ font-size:9px; font-weight:700; text-transform:uppercase; border-bottom:1px solid var(--ink); }
   .ticket .tk-items .l{ text-align:left; }
   .ticket .tk-items td.l:nth-child(2){ white-space:normal; overflow-wrap:break-word; }
   .ticket .tk-items tbody tr:hover{ background:transparent; }
@@ -366,8 +366,9 @@
     .ticket .meta{ font-size:9.5pt !important; margin-bottom:1mm !important; gap:3mm; }
     .ticket .meta span:last-child{ text-align:right; overflow-wrap:anywhere; }
     .ticket hr{ border-top:1px solid #000 !important; margin:2.5mm 0 !important; }
-    .ticket table.tk-items{ font-size:7pt !important; border:0.3mm solid #000 !important; }
-    .ticket .tk-items th, .ticket .tk-items td{ border:0.25mm solid #000 !important; padding:1mm 0.6mm !important; }
+    .ticket table.tk-items{ font-size:7pt !important; border:none !important; border-bottom:0.25mm solid #000 !important; }
+    .ticket .tk-items th, .ticket .tk-items td{ border:none !important; padding:1mm 0.5mm !important; }
+    .ticket .tk-items th{ border-bottom:0.25mm solid #000 !important; }
     .ticket .tk-items th{ font-size:6pt !important; }
     .ticket .it{ font-size:9.5pt !important; margin-bottom:1.8mm !important; gap:3mm !important; }
     .ticket .it > div:last-child{ white-space:nowrap; font-weight:600; }
@@ -462,7 +463,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "20 sep · v9";
+  var APP_VERSION = "20 sep · v10";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1974,9 +1975,8 @@
     var tableH = headerH + filas.reduce(function(a,f){ return a+f.h; }, 0);
 
     doc.setLineWidth(0.2);
-    doc.rect(x, tableTop, w, tableH);
-    for(var ci=1; ci<cb.length-1; ci++){ doc.line(cb[ci], tableTop, cb[ci], tableTop+tableH); }
     doc.line(x, tableTop+headerH, x+w, tableTop+headerH);
+    doc.line(x, tableTop+tableH, x+w, tableTop+tableH);
 
     var hy = tableTop + headerH/2 + 1.1;
     doc.setFont("courier","bold"); doc.setFontSize(6);
@@ -2007,7 +2007,6 @@
       doc.text(Number(it.precio).toFixed(2), cb[5]-0.8, ty, {align:"right"});
       doc.text(subtotalItem(it, !venta.redondeo).toFixed(2), cb[6]-0.8, ty, {align:"right"});
       ry += f.h;
-      if(idx < filas.length-1) doc.line(x, ry, x+w, ry);
     });
     y = tableTop + tableH + 7;
     row("TOTAL", fmt(venta.total), 11, true);
