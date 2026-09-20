@@ -2271,7 +2271,7 @@
   // prueba uno por uno con la lista de servicios conocidos.
   function btBuscarCanal(server, info){
     function mejor(chs){
-      return chs.find(function(ch){ return ch.properties.writeWithoutResponse; }) || chs.find(function(ch){ return ch.properties.write; }) || null;
+      return chs.find(function(ch){ return ch.properties.write; }) || chs.find(function(ch){ return ch.properties.writeWithoutResponse; }) || null;
     }
     function deServicio(svc){
       info.push("servicio "+svc.uuid);
@@ -2352,14 +2352,14 @@
   }
 
   function btEnviar(ch, bytes){
-    var chunk = 180, i = 0;
-    var sinResp = !!ch.properties.writeWithoutResponse && !!ch.writeValueWithoutResponse;
+    var chunk = 120, i = 0;
+    var sinResp = !(ch.properties.write && (ch.writeValueWithResponse || ch.writeValue)) && !!ch.properties.writeWithoutResponse;
     var total = bytes.length;
-    function esperar(){ return new Promise(function(r){ setTimeout(r, sinResp ? 12 : 0); }); }
+    function esperar(){ return new Promise(function(r){ setTimeout(r, sinResp ? 15 : 3); }); }
     function paso(){
       if(i >= total) return Promise.resolve();
       var parte = bytes.slice(i, i+chunk);
-      var w = sinResp ? ch.writeValueWithoutResponse(parte) : ch.writeValue(parte);
+      var w = sinResp ? ch.writeValueWithoutResponse(parte) : (ch.writeValueWithResponse ? ch.writeValueWithResponse(parte) : ch.writeValue(parte));
       return w.then(function(){
         i += parte.length;
         btEstado("Enviando… "+Math.round(i*100/total)+"%");
@@ -2469,7 +2469,7 @@
     if(lang === "ESCPOS"){
       // Modo recibo (ESC/POS): imagen por bandas con GS v 0, y avance de papel al final.
       var partes = [new Uint8Array([0x1b, 0x40, 0x1b, 0x61, 0x00])];
-      var banda = 240;
+      var banda = 96;
       for(var y0 = 0; y0 < r.h; y0 += banda){
         var hh = Math.min(banda, r.h - y0);
         partes.push(new Uint8Array([0x1d, 0x76, 0x30, 0x00, r.bpr & 255, (r.bpr >> 8) & 255, hh & 255, (hh >> 8) & 255]));
