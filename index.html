@@ -2256,32 +2256,75 @@
     if(el2) el2.textContent = txt || "";
   }
 
+  function etapa(nombre, promesa){
+    return Promise.resolve(promesa).catch(function(e){
+      var err = new Error((e && e.message) || String(e));
+      err.name = (e && e.name) || "Error";
+      err.etapa = nombre;
+      err.original = e;
+      throw err;
+    });
+  }
+
+  // Busca un canal donde escribir. Primero pide todos los servicios; si el navegador no lo permite (Bluefy),
+  // prueba uno por uno con la lista de servicios conocidos.
+  function btBuscarCanal(server, info){
+    function mejor(chs){
+      return chs.find(function(ch){ return ch.properties.writeWithoutResponse; }) || chs.find(function(ch){ return ch.properties.write; }) || null;
+    }
+    function deServicio(svc){
+      info.push("servicio "+svc.uuid);
+      return svc.getCharacteristics().then(function(chs){
+        chs.forEach(function(ch){
+          var p = []; ["read","write","writeWithoutResponse","notify"].forEach(function(k){ if(ch.properties[k]) p.push(k); });
+          info.push("  "+ch.uuid+" ["+p.join(",")+"]");
+        });
+        return mejor(chs);
+      }).catch(function(e){ info.push("  (sin acceso: "+((e && e.message) || e)+")"); return null; });
+    }
+    return server.getPrimaryServices().then(function(servicios){
+      var elegido = null;
+      return servicios.reduce(function(prev, svc){
+        return prev.then(function(){ if(elegido) return; return deServicio(svc).then(function(c){ if(c) elegido = c; }); });
+      }, Promise.resolve()).then(function(){ return elegido; });
+    }).catch(function(e){
+      info.push("getPrimaryServices falló: "+((e && e.message) || e));
+      return null;
+    }).then(function(encontrado){
+      if(encontrado) return encontrado;
+      var elegido = null;
+      return BT_SERVICIOS.reduce(function(prev, uuid){
+        return prev.then(function(){
+          if(elegido) return;
+          return server.getPrimaryService(uuid).then(deServicio).then(function(c){ if(c) elegido = c; }).catch(function(){});
+        });
+      }, Promise.resolve()).then(function(){ return elegido; });
+    });
+  }
+
+  var btUltimaInfo = [];
+
   function btConectar(){
     if(btPrinter.char && btPrinter.device && btPrinter.device.gatt && btPrinter.device.gatt.connected) return Promise.resolve(btPrinter.char);
+    var info = []; btUltimaInfo = info;
     var pedir = btPrinter.device ? Promise.resolve(btPrinter.device)
-      : navigator.bluetooth.requestDevice({ acceptAllDevices:true, optionalServices:BT_SERVICIOS });
+      : etapa("elegir impresora", navigator.bluetooth.requestDevice({ acceptAllDevices:true, optionalServices:BT_SERVICIOS }));
     return pedir.then(function(dev){
       btPrinter.device = dev;
       dev.addEventListener("gattserverdisconnected", function(){ btPrinter.char = null; });
       btEstado("Conectando con "+(dev.name||"la impresora")+"…");
-      return dev.gatt.connect();
+      info.push("dispositivo "+(dev.name||"sin nombre"));
+      return etapa("conectar", dev.gatt.connect());
     }).then(function(server){
-      return server.getPrimaryServices();
-    }).then(function(servicios){
-      var elegido = null;
-      return servicios.reduce(function(prev, svc){
-        return prev.then(function(){
-          if(elegido) return;
-          return svc.getCharacteristics().then(function(chs){
-            var c = chs.find(function(ch){ return ch.properties.writeWithoutResponse; }) || chs.find(function(ch){ return ch.properties.write; });
-            if(c) elegido = c;
-          }).catch(function(){});
-        });
-      }, Promise.resolve()).then(function(){
-        if(!elegido) throw new Error("La impresora no expone un canal de escritura conocido.");
-        btPrinter.char = elegido;
-        return elegido;
-      });
+      return etapa("buscar canal", btBuscarCanal(server, info));
+    }).then(function(elegido){
+      if(!elegido){
+        var err = new Error("La impresora no muestra un canal de escritura conocido.");
+        err.etapa = "buscar canal";
+        throw err;
+      }
+      btPrinter.char = elegido;
+      return elegido;
     });
   }
 
@@ -2439,14 +2482,16 @@
   function enviarAImpresora(cd){
     var r = canvasABits(cd);
     var bytes = comandoImpresion(r, btLang());
-    return btConectar().then(function(ch){ return btEnviar(ch, bytes); }).then(function(){ btEstado("Enviado a la impresora ✓"); });
+    return btConectar().then(function(ch){ return etapa("enviar", btEnviar(ch, bytes)); }).then(function(){ btEstado("Enviado a la impresora ✓"); });
   }
 
   function btErrorTexto(e){
     var m = (e && e.message) || String(e);
-    if(e && e.name === "NotFoundError") return "No elegiste ninguna impresora.";
-    if(e && e.name === "SecurityError") return "El navegador bloqueó el Bluetooth.";
-    return m;
+    var t = (e && e.etapa) ? "[" + e.etapa + "] " : "";
+    t += ((e && e.name && e.name !== "Error") ? e.name + ": " : "") + m;
+    if(btUltimaInfo && btUltimaInfo.length) t += "\n\n" + btUltimaInfo.slice(0, 14).join("\n");
+    t += "\n\nSi la impresora sigue conectada a la app del fabricante, desconéctala y ciérrala antes de volver a intentar.";
+    return t;
   }
 
   function imprimirDirecto(venta){
