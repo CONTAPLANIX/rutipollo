@@ -462,7 +462,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "20 sep · v7";
+  var APP_VERSION = "20 sep · v8";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2242,6 +2242,8 @@
   var BT_KEY_LANG = "lr_printer_lang_v1";
   function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2") ? v : "ESCPOS"; }
 
+  function btGrueso(){ var v = ""; try{ v = localStorage.getItem("lr_printer_bold_v1") || ""; }catch(e){} return v !== "no"; }
+
   function btDisponible(){ return !!(navigator.bluetooth && navigator.bluetooth.requestDevice); }
 
   function btMensajeNoDisponible(){
@@ -2446,13 +2448,28 @@
       }
       return false;
     };
+    // Primero: que puntos son negros. Segundo: engrosar 1 punto a la derecha y abajo (texto y lineas,
+    // no el logo) para que la impresion termica salga mas oscura y firme.
+    var negro = new Uint8Array(W * H), logo = new Uint8Array(W * H);
     for(var yy = 0; yy < H; yy++){
       for(var xx = 0; xx < W; xx++){
-        var p = (yy * W + xx) * 4;
+        var p = (yy * W + xx) * 4, i = yy * W + xx;
         var lum = 0.299 * data[p] + 0.587 * data[p+1] + 0.114 * data[p+2];
-        var umbral = 150;
-        if(cd.imgs.length && esLogo(xx, yy)) umbral = (BAYER4[yy % 4][xx % 4] + 0.5) / 16 * 255;
-        if(lum < umbral) bits[yy * bpr + (xx >> 3)] |= (0x80 >> (xx & 7));
+        var umbral = 165;
+        if(cd.imgs.length && esLogo(xx, yy)){ logo[i] = 1; umbral = (BAYER4[yy % 4][xx % 4] + 0.5) / 16 * 255; }
+        if(lum < umbral) negro[i] = 1;
+      }
+    }
+    var grueso = btGrueso();
+    for(var y2 = 0; y2 < H; y2++){
+      for(var x2 = 0; x2 < W; x2++){
+        var j = y2 * W + x2;
+        var on = negro[j];
+        if(!on && grueso && !logo[j]){
+          if(x2 > 0 && negro[j-1] && !logo[j-1]) on = 1;
+          else if(y2 > 0 && negro[j-W] && !logo[j-W]) on = 1;
+        }
+        if(on) bits[y2 * bpr + (x2 >> 3)] |= (0x80 >> (x2 & 7));
       }
     }
     return { bits:bits, w:W, h:H, bpr:bpr };
@@ -2638,6 +2655,7 @@
       + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
       + '    <h2 style="font-size:15px;">Impresora Bluetooth <span class="pay-tag efectivo" style="font-weight:400;">versión '+APP_VERSION+'</span></h2>'
       + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo ESC/POS compatible</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
+      + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-grueso"'+(btGrueso()?" checked":"")+'> Letra más gruesa y oscura</label>'
       + '    <div class="actions-row" style="justify-content:flex-start;margin-top:8px;"><button class="btn btn-sm" data-action="bt-probar">🖨 Hoja de prueba</button></div>'
       + '    <p class="section-sub" id="bt-status-ajustes" style="margin:8px 0 0;min-height:1em;"></p>'
       + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si sale texto raro, prueba en este orden: Recibo ESC/POS → ESC/POS compatible → TSPL. En iPhone se usa el navegador Bluefy.</p>'
@@ -3074,6 +3092,7 @@
         btn.disabled = n===0;
       }
     }
+    else if(t.id==="bt-grueso"){ try{ localStorage.setItem("lr_printer_bold_v1", t.checked ? "si" : "no"); }catch(e){} }
     else if(t.id==="bt-lang"){ try{ localStorage.setItem(BT_KEY_LANG, t.value); }catch(e){} }
     else if(t.id==="hist-year"){ ui.historialYear = Number(t.value); ui.selectMode=false; ui.selected={}; renderTab(); }
     else if(t.id==="resumen-dia-picker"){ ui.resumenDiaSel = t.value; renderTab(); }
