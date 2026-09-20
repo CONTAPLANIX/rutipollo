@@ -450,9 +450,16 @@
 
   function blankItem(){ return { producto:"", cantidad:1, kg:"", precio:0 }; }
   // Si la fila tiene kilogramos, el precio es por kilo; si no, es por unidad (cantidad).
-  function subtotalItem(i){
+  // Redondeo a 10 centimos (0.05 sube): 306.85 -> 306.90. Se aplica a cada producto y al total.
+  function redondear10(x){
+    var c = Math.round((Number(x)||0)*100 + 1e-7);
+    return Math.round(c/10)/10;
+  }
+  // sinRedondeo=true solo para notas emitidas antes de que existiera el redondeo.
+  function subtotalItem(i, sinRedondeo){
     var kg = Number(i.kg)||0;
-    return (kg>0 ? kg : (Number(i.cantidad)||0)) * (Number(i.precio)||0);
+    var crudo = (kg>0 ? kg : (Number(i.cantidad)||0)) * (Number(i.precio)||0);
+    return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
   function numTxt(n){ return String(Number((Number(n)||0).toFixed(3))); }
@@ -1267,7 +1274,7 @@
   }
 
   function draftTotal(){
-    return draft.items.reduce(function(s,i){ return s + subtotalItem(i); }, 0);
+    return redondear10(draft.items.reduce(function(s,i){ return s + subtotalItem(i); }, 0));
   }
 
   function viewNueva(){
@@ -1837,7 +1844,7 @@
       (v.items||[]).forEach(function(it){
         rows.push([
           v.correlativo, v.fecha, v.cliente, codigoItem(it), it.producto, it.cantidad, it.kg||"", it.precio,
-          subtotalItem(it).toFixed(2), Number(v.total).toFixed(2),
+          subtotalItem(it, !v.redondeo).toFixed(2), Number(v.total).toFixed(2),
           v.tipoPago==="credito"?"Pendiente de pago":"Contado", estado, saldoPendiente(v).toFixed(2),
           v.metodoPago ? metodoLabel(v.metodoPago) : "", v.vendedor||"",
           v.ubicacion ? mapsLink(v.ubicacion) : "", v.notas||""
@@ -1987,7 +1994,7 @@
       doc.text(numTxt(it.cantidad), cb[3]-0.8, ty, {align:"right"});
       doc.text(Number(it.kg)>0 ? numTxt(it.kg) : "-", cb[4]-0.8, ty, {align:"right"});
       doc.text(Number(it.precio).toFixed(2), cb[5]-0.8, ty, {align:"right"});
-      doc.text(subtotalItem(it).toFixed(2), cb[6]-0.8, ty, {align:"right"});
+      doc.text(subtotalItem(it, !venta.redondeo).toFixed(2), cb[6]-0.8, ty, {align:"right"});
       ry += f.h;
       if(idx < filas.length-1) doc.line(x, ry, x+w, ry);
     });
@@ -2114,7 +2121,7 @@
     var root = document.getElementById("overlay-root");
     var itemsHtml = '<div class="tk-moneda">MONEDA: '+MONEDA_NOMBRE+'</div><table class="tk-items"><colgroup><col class="c-cod"><col class="c-prod"><col class="c-cant"><col class="c-kg"><col class="c-pu"><col class="c-tot"></colgroup><thead><tr><th class="l">Cód</th><th class="l">Desc.</th><th>Can.</th><th>Kg.</th><th>P.U.</th><th>Imp.</th></tr></thead><tbody>'
       + venta.items.map(function(i){
-        return '<tr><td class="l cod">'+escapeHtml(codigoItem(i)||"-")+'</td><td class="l">'+escapeHtml(i.producto)+'</td><td>'+numTxt(i.cantidad)+'</td><td>'+(Number(i.kg)>0?numTxt(i.kg):"-")+'</td><td>'+Number(i.precio).toFixed(2)+'</td><td>'+subtotalItem(i).toFixed(2)+'</td></tr>';
+        return '<tr><td class="l cod">'+escapeHtml(codigoItem(i)||"-")+'</td><td class="l">'+escapeHtml(i.producto)+'</td><td>'+numTxt(i.cantidad)+'</td><td>'+(Number(i.kg)>0?numTxt(i.kg):"-")+'</td><td>'+Number(i.precio).toFixed(2)+'</td><td>'+subtotalItem(i, !venta.redondeo).toFixed(2)+'</td></tr>';
       }).join("")
       + '</tbody></table>';
     root.innerHTML = ''
@@ -2313,7 +2320,7 @@
         .map(function(i){ var o = { producto:String(i.producto).trim(), cantidad:Number(i.cantidad), precio:Number(i.precio)||0 }; if(Number(i.kg)>0) o.kg = Number(i.kg); if(i.codigo) o.codigo = i.codigo; return o; });
       if(!cliente){ alert("Ingresa el nombre del cliente o puesto."); return; }
       if(!validItems.length){ alert("Agrega al menos un producto con cantidad."); return; }
-      var total = validItems.reduce(function(s,i){return s+subtotalItem(i);},0);
+      var total = redondear10(validItems.reduce(function(s,i){return s+subtotalItem(i);},0));
       var fp = parseFecha(fecha);
       var tipoPago = draft.tipoPago==="credito" ? "credito" : "contado";
       var pagado = tipoPago==="contado";
@@ -2321,14 +2328,14 @@
       var fechaPago = pagado ? fecha : null;
       if(editingVentaId){
         var original = state.ventas.find(function(v){ return v.id===editingVentaId; });
-        var ventaEditada = Object.assign({}, original, { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago });
+        var ventaEditada = Object.assign({}, original, { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, redondeo:true, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago });
         editingVentaId = null;
         draft = { fecha: todayISO(), cliente:"", notas:"", tipoPago:"contado", metodoPago:"efectivo", items:[blankItem()] };
         renderTab();
         updateVenta(ventaEditada);
       } else {
         var maxCorr = state.ventas.reduce(function(m,v){return Math.max(m, v.correlativo||0);},0);
-        var venta = { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago, vendedor: currentUser?currentUser.nombre:"", correlativo:maxCorr+1, creadoEn:Date.now() };
+        var venta = { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, redondeo:true, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago, vendedor: currentUser?currentUser.nombre:"", correlativo:maxCorr+1, creadoEn:Date.now() };
         if(tipoPago==="credito"){
           var abonoInicialEl = document.getElementById("f-abono-inicial");
           var abonoInicialMonto = abonoInicialEl ? Math.min(Number(abonoInicialEl.value)||0, total) : 0;
