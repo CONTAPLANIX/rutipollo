@@ -228,6 +228,18 @@
   td input{ width:100%; background:transparent; border:none; border-bottom:1px solid transparent; padding:5px 2px; font-size:14px; color:var(--ink); }
   td input:focus{ border-bottom-color:var(--focus); }
   .col-cant{ width:78px; } .col-kg{ width:84px; } .col-precio{ width:110px; } .col-sub{ width:110px; } .col-del{ width:38px; }
+  /* En celular cada producto es una tarjeta: nombre arriba y Cant / Kg / P.unit / Importe abajo, todo visible. */
+  @media (max-width:700px){
+    table.items-form{ min-width:0; }
+    .items-form thead{ display:none; }
+    .items-form tbody tr{ display:grid; grid-template-columns:1fr 1fr 1fr 1.25fr; gap:8px 10px; padding:12px 12px 14px; position:relative; border-bottom:1px dashed var(--line); }
+    .items-form tbody td{ display:block; width:auto !important; padding:0; border:none; }
+    .items-form tbody td:first-child{ grid-column:1 / -1; padding-right:34px; }
+    .items-form td[data-label]::before{ content:attr(data-label); display:block; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; margin-bottom:2px; }
+    .items-form td.col-del{ position:absolute; top:8px; right:8px; }
+    .items-form td.col-sub{ font-size:15px; font-weight:700; color:var(--accent); align-self:end; padding-bottom:6px; white-space:nowrap; }
+    .items-form td input{ font-size:16px; border-bottom:1px solid var(--line); padding:6px 2px; }
+  }
   .total-row{ display:flex; justify-content:flex-end; align-items:baseline; gap:10px; padding:14px 4px 4px; font-size:15px; }
   .total-row .amt{ font-size:22px; color:var(--accent); font-weight:600; }
   .actions-row{ display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-wrap:wrap; }
@@ -1246,10 +1258,10 @@
     var sub = subtotalItem(item);
     return '<tr data-row="'+idx+'">'
       + '<td><div class="ac-wrap"><input class="item-input" autocomplete="off" data-idx="'+idx+'" data-field="producto" value="'+escapeHtml(item.producto)+'" placeholder="Nombre o código del producto"><div class="ac-list" id="ac-item-'+idx+'" hidden></div></div></td>'
-      + '<td class="col-cant"><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="cantidad" value="'+item.cantidad+'"></td>'
-      + '<td class="col-kg"><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="kg" placeholder="kg" value="'+(item.kg===undefined||item.kg===null?"":item.kg)+'"></td>'
-      + '<td class="col-precio"><input class="item-input" type="number" min="0" step="0.01" data-idx="'+idx+'" data-field="precio" value="'+item.precio+'"></td>'
-      + '<td class="col-sub mono" id="subtotal-'+idx+'">'+fmt(sub)+'</td>'
+      + '<td class="col-cant" data-label="Cant."><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="cantidad" value="'+item.cantidad+'"></td>'
+      + '<td class="col-kg" data-label="Kg"><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="kg" placeholder="kg" value="'+(item.kg===undefined||item.kg===null?"":item.kg)+'"></td>'
+      + '<td class="col-precio" data-label="P. unit."><input class="item-input" type="number" min="0" step="0.01" data-idx="'+idx+'" data-field="precio" value="'+item.precio+'"></td>'
+      + '<td class="col-sub mono" data-label="Importe" id="subtotal-'+idx+'">'+fmt(sub)+'</td>'
       + '<td class="col-del"><button class="btn-ghost" data-action="quitar-item" data-idx="'+idx+'" title="Quitar" aria-label="Quitar fila">✕</button></td>'
       + '</tr>';
   }
@@ -1276,7 +1288,7 @@
       + '    <div class="field"><label for="f-fecha">Fecha</label><input id="f-fecha" type="date" value="'+draft.fecha+'"></div>'
       + '    <div class="field ac-wrap"><label for="f-cliente">Cliente / puesto</label><input id="f-cliente" autocomplete="off" type="text" placeholder="Ej: Bodega San José" value="'+escapeHtml(draft.cliente)+'"><div class="ac-list" id="ac-cliente" hidden></div></div>'
       + '  </div>'
-      + '  <div class="items-wrap"><table><thead><tr><th>Producto</th><th>Cant.</th><th>Kg</th><th>P. Unit.</th><th>Subtotal</th><th></th></tr></thead><tbody id="items-body">'+rows+'</tbody></table></div>'
+      + '  <div class="items-wrap"><table class="items-form"><thead><tr><th>Producto</th><th>Cant.</th><th>Kg</th><th>P. Unit.</th><th>Importe</th><th></th></tr></thead><tbody id="items-body">'+rows+'</tbody></table></div>'
       + '  <div style="margin-top:10px;"><button class="btn btn-sm" data-action="agregar-item">+ Agregar producto</button></div>'
       + '  <div class="field" style="margin-top:14px;"><label>Tipo de venta</label><div class="pay-toggle">'
       + '    <button type="button" class="pay-opt'+(draft.tipoPago==="contado"?" on":"")+'" data-action="tipo-pago" data-val="contado">Contado</button>'
