@@ -462,6 +462,11 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
+  // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
+  function pieLineas(){
+    var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
+    return t.split(/\n|\.\s+/).map(function(x){ return x.trim().replace(/\.$/, ""); }).filter(Boolean);
+  }
   function numTxt(n){ return String(Number((Number(n)||0).toFixed(3))); }
 
   function genId(prefix){ return prefix+"_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7); }
@@ -2011,7 +2016,8 @@
     }
     y += 3;
     doc.setFont("courier","normal"); doc.setFontSize(8.5);
-    var pieLines = doc.splitTextToSize(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!", w);
+    var pieLines = [];
+    pieLineas().forEach(function(l){ pieLines = pieLines.concat(doc.splitTextToSize(l, w)); });
     doc.text(pieLines, x+w/2, y, {align:"center"});
     y += pieLines.length*3.8;
     return y;
@@ -2143,7 +2149,7 @@
       + '      <div class="total"><span>Total</span><span>'+fmt(venta.total)+'</span></div>'
       + '      <div class="pago-bloque">'+pagoLineas(venta).map(function(r){ return '<div class="meta"><span>'+escapeHtml(r[0])+'</span><span>'+escapeHtml(r[1])+'</span></div>'; }).join("")+'</div>'
       + (venta.notas ? '<div class="foot">'+escapeHtml(venta.notas)+'</div>' : '')
-      + '      <div class="foot">'+escapeHtml(state.negocio.pie||"Gracias por su Compra. ¡Hasta la próxima entrega!")+'</div>'
+      + '      <div class="foot">'+pieLineas().map(escapeHtml).join("<br>")+'</div>'
       + '    </div>'
       + '    <div class="ticket-actions">'
       + '      <button class="btn" data-action="cerrar-overlay">Cerrar</button>'
