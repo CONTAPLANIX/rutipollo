@@ -427,7 +427,7 @@
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
   var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: 0, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
     gateMode: "login", gateSelectedId: null, gateError: "", soloMisVentas: false,
-    cobrarVista: "pendientes", cobrarBuscar: "", clientesBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
+    cobrarVista: "pendientes", cobrarBuscar: "", clientesBuscar: "", productosBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
 
   var LS = { ventas:"lr_ventas_v1", productos:"lr_productos_v1", clientes:"lr_clientes_v1", negocio:"lr_negocio_v1", pending:"lr_pending_deletes_v1", usuarios:"lr_usuarios_v1", currentUser:"lr_current_user_v1", lastBackup:"lr_last_backup_v1" };
   var pendingDeletes = { ventas:[], productos:[], clientes:[], usuarios:[] };
@@ -1742,12 +1742,6 @@
 
   function viewProductos(){
     var editing = ui.editingProductoId ? state.productos.find(function(p){return p.id===ui.editingProductoId;}) : null;
-    var rows = state.productos.length ? state.productos.slice().sort(function(a,b){ return (a.codigo||"").localeCompare(b.codigo||""); }).map(function(p){
-      return '<tr><td class="mono">'+escapeHtml(p.codigo||"—")+'</td><td>'+escapeHtml(p.nombre)+'</td><td class="mono">'+fmt(p.precio)+'</td><td>'+escapeHtml(p.unidad||"")+'</td>'
-        + '<td style="text-align:right;white-space:nowrap;">'+(puedeGestionar() ? '<button class="btn btn-sm" data-action="editar-producto" data-id="'+p.id+'">Editar</button> '
-        + '<button class="btn btn-sm btn-danger" data-action="eliminar-producto" data-id="'+p.id+'">Eliminar</button>' : '')+'</td></tr>';
-    }).join("") : '<tr><td colspan="5" class="empty">Aún no registras productos del catálogo.</td></tr>';
-
     return ''
       + '<h1 class="section-title">Catálogo de productos</h1>'
       + '<p class="section-sub">Opcional: guarda tus productos frecuentes, con código, para llenar notas más rápido.</p>'
@@ -1762,7 +1756,25 @@
       + '  </div>'
       + '  <div class="actions-row">'+(editing?'<button class="btn" data-action="cancelar-edicion-producto">Cancelar</button>':'')+'<button class="btn btn-primary" data-action="guardar-producto" data-id="'+(editing?editing.id:"")+'">'+(editing?"Guardar cambios":"Agregar producto")+'</button></div>'
       + '</div>'
-      + '<div class="items-wrap prod-table"><table><thead><tr><th>Código</th><th>Producto</th><th>Precio</th><th>Unidad</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+      + '<div class="field" style="max-width:420px;"><label for="productos-buscar">🔍 Buscar producto (por nombre o código)</label><input id="productos-buscar" type="search" autocomplete="off" placeholder="Ej: mejorado, 2114, alitas" value="'+escapeHtml(ui.productosBuscar||"")+'"></div>'
+      + '<div class="items-wrap prod-table"><table><thead><tr><th>Código</th><th>Producto</th><th>Precio</th><th>Unidad</th><th></th></tr></thead><tbody id="productos-filas">'+productosFilasHtml()+'</tbody></table></div>';
+  }
+
+  function sinAcentos(t){ return String(t||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
+
+  function productosFilasHtml(){
+    if(!state.productos.length) return '<tr><td colspan="5" class="empty">Aún no registras productos del catálogo.</td></tr>';
+    var terms = sinAcentos(ui.productosBuscar).split(/\s+/).filter(Boolean);
+    var lista = state.productos.filter(function(p){
+      var hay = sinAcentos((p.codigo||"")+" "+(p.nombre||""));
+      return terms.every(function(t){ return hay.indexOf(t)>-1; });
+    }).sort(function(a,b){ return (a.codigo||"").localeCompare(b.codigo||"", undefined, {numeric:true}); });
+    if(!lista.length) return '<tr><td colspan="5" class="empty">Ningún producto coincide con "'+escapeHtml(ui.productosBuscar)+'".</td></tr>';
+    return lista.map(function(p){
+      return '<tr><td class="mono">'+escapeHtml(p.codigo||"—")+'</td><td>'+escapeHtml(p.nombre)+'</td><td class="mono">'+fmt(p.precio)+'</td><td>'+escapeHtml(p.unidad||"")+'</td>'
+        + '<td style="text-align:right;white-space:nowrap;">'+(puedeGestionar() ? '<button class="btn btn-sm" data-action="editar-producto" data-id="'+p.id+'">Editar</button> '
+        + '<button class="btn btn-sm btn-danger" data-action="eliminar-producto" data-id="'+p.id+'">Eliminar</button>' : '')+'</td></tr>';
+    }).join("");
   }
 
   function viewClientes(){
@@ -2364,7 +2376,7 @@
       saveNegocio(data);
       closeOverlay();
     }
-    else if(action==="editar-producto"){ ui.editingProductoId = t.getAttribute("data-id"); renderTab(); }
+    else if(action==="editar-producto"){ ui.editingProductoId = t.getAttribute("data-id"); renderTab(); window.scrollTo(0,0); var pn = document.getElementById("p-nombre"); if(pn) pn.focus(); }
     else if(action==="cancelar-edicion-producto"){ ui.editingProductoId = null; renderTab(); }
     else if(action==="guardar-producto"){
       var codigo = document.getElementById("p-codigo").value.trim();
@@ -2579,6 +2591,11 @@
       if(field==="producto") showProductoSuggestions(idx, t.value);
     }
     else if(t.id==="f-cliente"){ showClienteSuggestions(t.value); }
+    else if(t.id==="productos-buscar"){
+      ui.productosBuscar = t.value;
+      var contP = document.getElementById("productos-filas");
+      if(contP) contP.innerHTML = productosFilasHtml();
+    }
     else if(t.id==="clientes-buscar"){
       ui.clientesBuscar = t.value;
       var contC = document.getElementById("clientes-lista");
