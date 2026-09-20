@@ -1979,12 +1979,17 @@
 
     var hy = tableTop + headerH/2 + 1.1;
     doc.setFont("courier","bold"); doc.setFontSize(6);
-    doc.text("CÓD", cb[0]+0.8, hy);
-    doc.text("DESC.", cb[1]+0.8, hy);
-    doc.text("CAN.", cb[3]-0.8, hy, {align:"right"});
-    doc.text("KG.", cb[4]-0.8, hy, {align:"right"});
-    doc.text("P.U.", cb[5]-0.8, hy, {align:"right"});
-    doc.text("IMP.", cb[6]-0.8, hy, {align:"right"});
+    // Cada titulo va completo si cabe en su casilla; solo se abrevia cuando hace falta.
+    function cabecera(opciones, ancho){
+      for(var oi=0; oi<opciones.length; oi++){ if(doc.getTextWidth(opciones[oi]) <= ancho - 1.6) return opciones[oi]; }
+      return opciones[opciones.length-1];
+    }
+    doc.text(cabecera(["CÓDIGO","CÓD."], cb[1]-cb[0]), cb[0]+0.8, hy);
+    doc.text(cabecera(["DESCRIPCIÓN","DESCRIP.","DESC."], cb[2]-cb[1]), cb[1]+0.8, hy);
+    doc.text(cabecera(["CANTIDAD","CANT.","CAN."], cb[3]-cb[2]), cb[3]-0.8, hy, {align:"right"});
+    doc.text(cabecera(["KG"], cb[4]-cb[3]), cb[4]-0.8, hy, {align:"right"});
+    doc.text(cabecera(["P. UNITARIO","P.UNIT.","P.U."], cb[5]-cb[4]), cb[5]-0.8, hy, {align:"right"});
+    doc.text(cabecera(["IMPORTE","IMP."], cb[6]-cb[5]), cb[6]-0.8, hy, {align:"right"});
 
     doc.setFont("courier","normal"); doc.setFontSize(fs);
     var ry = tableTop + headerH;
@@ -2125,7 +2130,7 @@
   function openTicket(venta){
     currentTicketVenta = venta;
     var root = document.getElementById("overlay-root");
-    var itemsHtml = '<div class="tk-moneda">MONEDA: '+MONEDA_NOMBRE+'</div><table class="tk-items"><colgroup><col class="c-cod"><col class="c-prod"><col class="c-cant"><col class="c-kg"><col class="c-pu"><col class="c-tot"></colgroup><thead><tr><th class="l">Cód</th><th class="l">Desc.</th><th>Can.</th><th>Kg.</th><th>P.U.</th><th>Imp.</th></tr></thead><tbody>'
+    var itemsHtml = '<div class="tk-moneda">MONEDA: '+MONEDA_NOMBRE+'</div><table class="tk-items"><colgroup><col class="c-cod"><col class="c-prod"><col class="c-cant"><col class="c-kg"><col class="c-pu"><col class="c-tot"></colgroup><thead><tr><th class="l">Código</th><th class="l">Descripción</th><th>Can.</th><th>Kg</th><th>P.Unit.</th><th>Importe</th></tr></thead><tbody>'
       + venta.items.map(function(i){
         return '<tr><td class="l cod">'+escapeHtml(codigoItem(i)||"-")+'</td><td class="l">'+escapeHtml(i.producto)+'</td><td>'+numTxt(i.cantidad)+'</td><td>'+(Number(i.kg)>0?numTxt(i.kg):"-")+'</td><td>'+Number(i.precio).toFixed(2)+'</td><td>'+subtotalItem(i, !venta.redondeo).toFixed(2)+'</td></tr>';
       }).join("")
@@ -2169,6 +2174,58 @@
         if(el) el.textContent = addr || "No se pudo obtener la dirección";
       });
     }
+  }
+
+  // Impresion "justa": la nota se pasa a un marco oculto con el mismo estilo de impresion (80 mm),
+  // se mide su alto real y se fija el tamaño de la hoja a ese alto. Asi cabe todo, sin cortes ni hojas de mas,
+  // sean 2 o 20 productos.
+  function crearMarcoTicket(cuandoListo){
+    var tk = document.querySelector("#overlay-root .ticket");
+    if(!tk){ cuandoListo(null, 0); return; }
+    var css = Array.prototype.map.call(document.querySelectorAll("style"), function(st){ return st.textContent; }).join("\n");
+    var ini = css.indexOf("@media print{"), reglasImpresion = "";
+    if(ini > -1){
+      var j = ini + 13, prof = 1;
+      while(j < css.length && prof > 0){ var ch = css.charAt(j); if(ch==="{") prof++; else if(ch==="}") prof--; j++; }
+      reglasImpresion = css.slice(ini + 13, j - 1);
+    }
+    var base = css.replace(/@page\s*\{[^}]*\}/, "");
+    var fr = document.createElement("iframe");
+    fr.setAttribute("aria-hidden", "true");
+    fr.style.cssText = "position:fixed;left:-10000px;top:0;width:80mm;height:4000px;border:0;visibility:hidden;";
+    document.body.appendChild(fr);
+    var d = fr.contentWindow.document;
+    d.open();
+    d.write('<!doctype html><html><head><meta charset="utf-8"><style>'+base+'</style><style>'+reglasImpresion+'</style><style>.overlay{position:static !important;inset:auto !important;height:auto !important;min-height:0 !important;overflow:visible !important;} #overlay-root{position:static !important;} .modal{margin:0 !important;max-height:none !important;overflow:visible !important;} body{overflow:visible !important;}</style><style id="pg"></style></head>'
+      + '<body><div id="overlay-root"><div class="overlay"><div class="modal">'+tk.outerHTML+'</div></div></div></body></html>');
+    d.close();
+    var terminado = false;
+    function medir(){
+      if(terminado) return; terminado = true;
+      var t = d.querySelector(".ticket");
+      var px = t ? t.getBoundingClientRect().bottom : 0;
+      var mm = Math.max(40, Math.ceil(px * 25.4 / 96) + 1);
+      d.getElementById("pg").textContent = "@page{ size:80mm "+mm+"mm; margin:0; }";
+      cuandoListo(fr, mm);
+    }
+    var imgs = Array.prototype.slice.call(d.images || []);
+    var pendientes = imgs.filter(function(im){ return !im.complete; }).length;
+    if(!pendientes){ setTimeout(medir, 80); }
+    else {
+      imgs.forEach(function(im){ if(!im.complete){ im.onload = im.onerror = function(){ if(--pendientes<=0) setTimeout(medir, 50); }; } });
+      setTimeout(medir, 2500);
+    }
+  }
+
+  function imprimirTicketAjustado(){
+    crearMarcoTicket(function(fr){
+      if(!fr){ window.print(); return; }
+      var w = fr.contentWindow;
+      var limpiar = function(){ setTimeout(function(){ if(fr.parentNode) fr.parentNode.removeChild(fr); }, 500); };
+      w.onafterprint = limpiar;
+      setTimeout(limpiar, 120000);
+      try{ w.focus(); w.print(); }catch(e){ limpiar(); window.print(); }
+    });
   }
 
   function addDaysISO(iso, days){
@@ -2387,7 +2444,7 @@
       }
     }
     else if(action==="cerrar-overlay"){ if(e.target===t || e.target.classList.contains("overlay")) closeOverlay(); }
-    else if(action==="imprimir-ticket"){ window.print(); }
+    else if(action==="imprimir-ticket"){ imprimirTicketAjustado(); }
     else if(action==="compartir-pdf-ticket"){ if(currentTicketVenta) compartirPdfTicket(currentTicketVenta); }
     else if(action==="descargar-pdf-ticket"){ if(currentTicketVenta) descargarPdfTicket(currentTicketVenta); }
     else if(action==="abrir-ajustes"){ openAjustes(); }
