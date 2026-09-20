@@ -462,7 +462,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "20 sep · v8";
+  var APP_VERSION = "20 sep · v9";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2355,21 +2355,25 @@
   }
 
   function btEnviar(ch, bytes){
-    var chunk = 120, i = 0;
-    var sinResp = !(ch.properties.write && (ch.writeValueWithResponse || ch.writeValue)) && !!ch.properties.writeWithoutResponse;
-    var total = bytes.length;
-    function esperar(){ return new Promise(function(r){ setTimeout(r, sinResp ? 15 : 3); }); }
+    var total = bytes.length, i = 0;
+    var rapido = !!ch.properties.writeWithoutResponse && !!ch.writeValueWithoutResponse;
+    var chunk = rapido ? 180 : 120;
+    var errores = 0;
+    function esperar(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
     function paso(){
       if(i >= total) return Promise.resolve();
-      var parte = bytes.slice(i, i+chunk);
-      var w = sinResp ? ch.writeValueWithoutResponse(parte) : (ch.writeValueWithResponse ? ch.writeValueWithResponse(parte) : ch.writeValue(parte));
+      var parte = bytes.slice(i, i + chunk);
+      var w = rapido ? ch.writeValueWithoutResponse(parte) : (ch.writeValueWithResponse ? ch.writeValueWithResponse(parte) : ch.writeValue(parte));
       return w.then(function(){
         i += parte.length;
-        btEstado("Enviando… "+Math.round(i*100/total)+"%");
-        return esperar();
+        if((i / chunk) % 8 < 1) btEstado("Enviando… " + Math.round(i * 100 / total) + "%");
+        return esperar(rapido ? 6 : 2);
       }, function(e){
-        if(chunk > 20){ chunk = chunk > 100 ? 100 : 20; return null; }
-        throw e;
+        errores++;
+        if(errores > 40) throw e;
+        if(rapido && errores > 3){ rapido = false; chunk = 120; }
+        else if(chunk > 60) chunk = Math.floor(chunk / 2);
+        return esperar(40);
       }).then(paso);
     }
     return paso();
@@ -2487,13 +2491,21 @@
     if(lang === "ESCPOS"){
       // Modo recibo (ESC/POS): imagen por bandas con GS v 0, y avance de papel al final.
       var partes = [new Uint8Array([0x1b, 0x40, 0x1b, 0x61, 0x00])];
-      var banda = 96;
-      for(var y0 = 0; y0 < r.h; y0 += banda){
-        var hh = Math.min(banda, r.h - y0);
+      // Las filas en blanco no se mandan como imagen: se manda "avanzar N puntos" (mucho menos datos).
+      var esBlanca = function(y){ var o = y * r.bpr; for(var i = 0; i < r.bpr; i++){ if(r.bits[o + i]) return false; } return true; };
+      var y0 = 0, bandaMax = 160;
+      while(y0 < r.h){
+        if(esBlanca(y0)){
+          var nb = 0; while(y0 + nb < r.h && esBlanca(y0 + nb)) nb++;
+          for(var q = nb; q > 0; q -= 255) partes.push(new Uint8Array([0x1b, 0x4a, Math.min(q, 255)]));
+          y0 += nb; continue;
+        }
+        var hh = 0; while(hh < bandaMax && y0 + hh < r.h && !esBlanca(y0 + hh)) hh++;
         partes.push(new Uint8Array([0x1d, 0x76, 0x30, 0x00, r.bpr & 255, (r.bpr >> 8) & 255, hh & 255, (hh >> 8) & 255]));
         partes.push(r.bits.slice(y0 * r.bpr, (y0 + hh) * r.bpr));
+        y0 += hh;
       }
-      partes.push(new Uint8Array([0x1b, 0x64, 0x04]));
+      partes.push(new Uint8Array([0x1b, 0x64, 0x03]));
       return unir(partes);
     }
     if(lang === "ESCPOS2"){
