@@ -2234,8 +2234,9 @@
   // La nota se dibuja en un canvas (mismo diseño del PDF), se convierte a puntos blanco/negro (203 dpi)
   // y se envia a la impresora con CPCL o TSPL. No necesita la app del fabricante ni modo recibo.
 
-  var BT_SERVICIOS = [0xff00, 0xffe0, 0xfff0, 0xfee7, 0x18f0, 0xae30, 0xaf30, 0xff12, 0xfe59, 0xffb0, 0xfea0,
-    "49535343-fe7d-4ae5-8fa9-9fafd205e455", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"];
+  function uuid16(n){ return "0000" + n.toString(16).padStart(4, "0") + "-0000-1000-8000-00805f9b34fb"; }
+  var BT_SERVICIOS = [0xff00, 0xffe0, 0xfff0, 0xfee7, 0x18f0, 0xae30, 0xaf30, 0xff12, 0xfe59, 0xffb0, 0xfea0].map(uuid16).concat([
+    "49535343-fe7d-4ae5-8fa9-9fafd205e455", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"]);
   var btPrinter = { device:null, char:null };
   var BT_KEY_LANG = "lr_printer_lang_v1";
   function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return v==="TSPL" ? "TSPL" : "CPCL"; }
@@ -2304,11 +2305,33 @@
 
   var btUltimaInfo = [];
 
+  // Prueba varias formas de pedir la impresora, porque cada navegador acepta unas distintas.
+  function pedirDispositivo(info){
+    var intentos = [
+      ["todos + servicios", { acceptAllDevices:true, optionalServices:BT_SERVICIOS }],
+      ["nombre HQ300 + servicios", { filters:[{ namePrefix:"HQ300" }], optionalServices:BT_SERVICIOS }],
+      ["todos + servicio FF00", { acceptAllDevices:true, optionalServices:[uuid16(0xff00)] }]
+    ];
+    var i = 0;
+    function probar(){
+      var it = intentos[i];
+      return navigator.bluetooth.requestDevice(it[1]).catch(function(e){
+        var nombre = e && e.name;
+        if(nombre === "NotFoundError") throw e; // el usuario cerro la lista
+        info.push("intento '" + it[0] + "' falló: " + ((e && e.message) || e));
+        i++;
+        if(i < intentos.length) return probar();
+        throw e;
+      });
+    }
+    return probar();
+  }
+
   function btConectar(){
     if(btPrinter.char && btPrinter.device && btPrinter.device.gatt && btPrinter.device.gatt.connected) return Promise.resolve(btPrinter.char);
     var info = []; btUltimaInfo = info;
     var pedir = btPrinter.device ? Promise.resolve(btPrinter.device)
-      : etapa("elegir impresora", navigator.bluetooth.requestDevice({ acceptAllDevices:true, optionalServices:BT_SERVICIOS }));
+      : etapa("elegir impresora", pedirDispositivo(info));
     return pedir.then(function(dev){
       btPrinter.device = dev;
       dev.addEventListener("gattserverdisconnected", function(){ btPrinter.char = null; });
