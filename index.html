@@ -476,7 +476,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v21";
+  var APP_VERSION = "21 sep · v22";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1227,7 +1227,11 @@
     currentUser = null;
     try{ localStorage.removeItem(LS.currentUser); localStorage.removeItem(LS.usuarios); }catch(e){}
     state.usuarios = [];
-    var recargar = function(){ location.reload(); };
+    ui.gateMode = "login"; ui.gateNombre = ""; ui.gateEscribir = false; ui.gateError = "";
+    closeOverlay();
+    updateUserBadge();
+    renderGate();
+    var recargar = function(){ try{ location.reload(); }catch(e){} };
     if(window.firebase && firebase.auth){
       try{ firebase.auth().signOut().then(recargar, recargar); return; }catch(e){}
     }
@@ -2776,6 +2780,8 @@
       + '    <div class="field"><label for="a-pie">Mensaje al pie de la nota</label><input id="a-pie" type="text" value="'+escapeHtml(n.pie||"")+'"></div>'
       + '    <div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cancelar</button><button class="btn btn-primary" data-action="guardar-ajustes">Guardar</button></div>'
       + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
+      + '    <div class="actions-row" style="justify-content:space-between;align-items:center;"><span>Sesión de <strong>'+escapeHtml(currentUser?currentUser.nombre:"")+'</strong></span><button class="btn btn-danger" data-action="cerrar-sesion">Cerrar sesión</button></div>'
+      + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
       + '    <h2 style="font-size:15px;">Impresora Bluetooth <span class="pay-tag efectivo" style="font-weight:400;">versión '+APP_VERSION+'</span></h2>'
       + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo ESC/POS compatible</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
       + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-grueso"'+(btGrueso()?" checked":"")+'> Letra más gruesa y oscura</label>'
@@ -3053,8 +3059,10 @@
     else if(action==="cobrar-month-prev"){ ui.cobrarMonth = ui.cobrarMonth===1 ? 12 : ui.cobrarMonth-1; if(ui.cobrarMonth===12) ui.cobrarYear--; renderTab(); }
     else if(action==="cobrar-month-next"){ ui.cobrarMonth = ui.cobrarMonth===12 ? 1 : ui.cobrarMonth+1; if(ui.cobrarMonth===1) ui.cobrarYear++; renderTab(); }
     else if(action==="cambiar-usuario"){
-      if(confirm("¿Cambiar de usuario?")) logout();
+      var okC = true; try{ okC = confirm("¿Cambiar de usuario?"); }catch(e){}
+      if(okC) logout();
     }
+    else if(action==="cerrar-sesion"){ logout(); }
     else if(action==="agregar-usuario"){
       if(!esAdmin(currentUser)) return;
       var unombre = document.getElementById("nu-nombre").value.trim();
