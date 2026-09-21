@@ -469,7 +469,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v14";
+  var APP_VERSION = "21 sep · v15";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -674,6 +674,16 @@
       .catch(function(){ return null; });
   }
 
+  // Si en "producto" escribieron un codigo del catalogo (ej. 2113), se cambia por el producto real.
+  function resolverItemPorCodigo(it){
+    var txt = String(it.producto||"").trim().toLowerCase();
+    if(!txt) return false;
+    var p = state.productos.find(function(x){ return String(x.codigo||"").trim().toLowerCase()===txt; });
+    if(!p) return false;
+    it.producto = p.nombre; it.codigo = p.codigo || "";
+    if(!(Number(it.precio)>0) && p.precio) it.precio = p.precio;
+    return true;
+  }
   function codigoItem(it){ return it.codigo || codigoDeProducto(it.producto); }
   function codigoDeProducto(nombre){
     var n = String(nombre||"").trim().toLowerCase();
@@ -2789,6 +2799,7 @@
       var fecha = document.getElementById("f-fecha").value || todayISO();
       var cliente = document.getElementById("f-cliente").value.trim();
       var notas = document.getElementById("f-notas").value.trim();
+      draft.items.forEach(resolverItemPorCodigo);
       var validItems = draft.items.filter(function(i){ return String(i.producto).trim() && Number(i.cantidad)>0; })
         .map(function(i){ var o = { producto:String(i.producto).trim(), cantidad:Number(i.cantidad), precio:Number(i.precio)||0 }; if(Number(i.kg)>0) o.kg = Number(i.kg); if(i.codigo) o.codigo = i.codigo; return o; });
       if(!cliente){ alert("Ingresa el nombre del cliente o puesto."); return; }
@@ -3113,6 +3124,13 @@
 
   document.addEventListener("focusout", function(e){
     var t = e.target;
+    if(t.classList && t.classList.contains("item-input") && t.getAttribute("data-field")==="producto"){
+      var ridx = Number(t.getAttribute("data-idx"));
+      if(draft.items[ridx] && resolverItemPorCodigo(draft.items[ridx])){
+        setTimeout(function(){ hideAllSuggestions(); renderTab(); }, 190);
+        return;
+      }
+    }
     if(t.id==="f-cliente" || (t.classList && t.classList.contains("item-input") && t.getAttribute("data-field")==="producto")){
       setTimeout(hideAllSuggestions, 180);
     }
