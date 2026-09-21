@@ -476,7 +476,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v22";
+  var APP_VERSION = "21 sep · v23";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1992,13 +1992,32 @@
 
   // ---------- descargar nota en PDF ----------
 
+  // El logo se reduce a 420 px y se pasa a JPEG con fondo blanco: el PDF pasa de ~4 MB a unos 60 KB.
+  var logoDataUrlCache = {};
   function loadImageAsDataUrl(url){
+    if(logoDataUrlCache[url]) return Promise.resolve(logoDataUrlCache[url]);
     return fetch(url).then(function(res){ return res.blob(); }).then(function(blob){
       return new Promise(function(resolve, reject){
         var reader = new FileReader();
         reader.onload = function(){ resolve(reader.result); };
         reader.onerror = reject;
         reader.readAsDataURL(blob);
+      });
+    }).then(function(dataUrl){
+      return new Promise(function(resolve){
+        var im = new Image();
+        im.onload = function(){
+          try{
+            var L = 420, c = document.createElement("canvas"); c.width = L; c.height = L;
+            var ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, L, L);
+            var r = Math.min(L / im.width, L / im.height), dw = im.width * r, dh = im.height * r;
+            ctx.drawImage(im, (L - dw) / 2, (L - dh) / 2, dw, dh);
+            var out = c.toDataURL("image/jpeg", 0.9);
+            logoDataUrlCache[url] = out; resolve(out);
+          }catch(e){ resolve(dataUrl); }
+        };
+        im.onerror = function(){ resolve(dataUrl); };
+        im.src = dataUrl;
       });
     });
   }
@@ -2024,7 +2043,7 @@
     }
 
     if(logoDataUrl){
-      try{ doc.addImage(logoDataUrl, "PNG", x+w/2-13, y, 26, 26); y += 30; }catch(e){}
+      try{ doc.addImage(logoDataUrl, "JPEG", x+w/2-13, y, 26, 26); y += 30; }catch(e){}
     } else {
       y += 4; center(state.negocio.nombre||"Rico Pollo Dissur", 13, true); y+=6;
     }
