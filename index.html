@@ -465,7 +465,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "20 sep · v11";
+  var APP_VERSION = "21 sep · v12";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2162,7 +2162,6 @@
       + '      <button class="btn" data-action="descargar-pdf-ticket">⬇ Descargar PDF</button>'
       + '      <button class="btn btn-primary" data-action="compartir-pdf-ticket">📤 Compartir / Imprimir</button>'
       + '      <button class="btn btn-primary" data-action="imprimir-directo">🖨 Imprimir directo</button>'
-      + '      <button class="btn" data-action="imprimir-ticket">Imprimir</button>'
       + (venta.id && puedeGestionar() ? '      <button class="btn" data-action="editar-venta" data-id="'+venta.id+'">Editar</button>' : '')
       + (venta.id && puedeGestionar() ? '      <button class="btn btn-danger" data-action="eliminar-venta" data-id="'+venta.id+'">Eliminar</button>' : '')
       + '    </div>'
