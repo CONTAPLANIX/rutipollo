@@ -244,6 +244,13 @@
     .items-form td.col-sub{ font-size:15px; font-weight:700; color:var(--accent); align-self:end; padding-bottom:6px; white-space:nowrap; }
     .items-form td input{ font-size:16px; border-bottom:1px solid var(--line); padding:6px 2px; }
   }
+  .vend-box{ margin-bottom:18px; }
+  .vend-row{ padding:10px 0; border-bottom:1px dashed var(--line); }
+  .vend-row:last-child{ border-bottom:none; }
+  .vend-head{ display:flex; justify-content:space-between; align-items:baseline; font-size:15px; }
+  .vend-bar{ height:6px; background:var(--paper-alt); border-radius:3px; margin:6px 0 4px; overflow:hidden; }
+  .vend-bar span{ display:block; height:100%; background:var(--accent); border-radius:3px; }
+  .vend-sub{ font-size:12.5px; color:var(--ink-soft); }
   .sel-wrap{ display:inline-flex; align-items:center; gap:8px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:600; }
   .sel-wrap select{ font-size:14px; padding:8px 30px 8px 12px; text-transform:none; letter-spacing:0; font-weight:500; }
   .total-row{ display:flex; justify-content:flex-end; align-items:baseline; gap:10px; padding:14px 4px 4px; font-size:15px; }
@@ -469,7 +476,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v17";
+  var APP_VERSION = "21 sep · v18";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1252,11 +1259,16 @@
       return;
     }
 
-    var ultimo = ""; try{ ultimo = localStorage.getItem("lr_last_name_v1") || ""; }catch(e){}
+    var ultimo = "", recientes = [];
+    try{ ultimo = localStorage.getItem("lr_last_name_v1") || ""; recientes = JSON.parse(localStorage.getItem("lr_recent_names_v1") || "[]"); }catch(e){}
+    var chips = recientes.length ? '<div class="user-grid" style="margin-bottom:6px;">' + recientes.map(function(n){
+        return '<button class="user-chip" data-action="gate-nombre-rapido" data-nombre="'+escapeHtml(n)+'" data-initial="'+escapeHtml(n.trim().charAt(0).toUpperCase())+'">'+escapeHtml(n)+'</button>';
+      }).join("") + '</div>' : '';
     root.innerHTML = '<div class="gate">'
       + logo
       + '<h1 class="section-title" style="margin:0;">Iniciar sesión</h1>'
-      + '<p class="gate-note">Escribe tu nombre y tu contraseña.</p>'
+      + '<p class="gate-note">'+(recientes.length ? 'Toca tu nombre o escríbelo, y pon tu contraseña.' : 'Escribe tu nombre y tu contraseña.')+'</p>'
+      + chips
       + '<div class="gate-form">'
       + '  <input id="gate-nombre" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Tu nombre" maxlength="40" value="'+escapeHtml(ui.gateNombre||ultimo)+'">'
       + '  <input id="gate-password" type="password" autocomplete="current-password" placeholder="Contraseña">'
@@ -1457,6 +1469,31 @@
       + bars + labelsHtml + '</svg>';
   }
 
+  // Cuadro "Ventas por vendedor": solo lo ven las administradoras. Usa las notas del periodo que se esta viendo.
+  function ventasPorVendedorHtml(pool, titulo){
+    if(!esAdmin(currentUser)) return "";
+    var por = {};
+    pool.forEach(function(v){
+      var k = v.vendedor || "(sin vendedor)";
+      if(!por[k]) por[k] = { total:0, notas:0, cobrado:0, pendiente:0 };
+      por[k].total += Number(v.total)||0; por[k].notas++;
+      por[k].cobrado += cobradoTotal([v]);
+      if(estaPendiente(v)) por[k].pendiente += saldoPendiente(v);
+    });
+    var nombres = Object.keys(por).sort(function(a,b){ return por[b].total - por[a].total; });
+    if(!nombres.length) return "";
+    var maxT = por[nombres[0]].total || 1;
+    var filas = nombres.map(function(n){
+      var d = por[n];
+      return '<div class="vend-row">'
+        + '<div class="vend-head"><strong>'+escapeHtml(n)+'</strong><span class="mono">'+fmt(d.total)+'</span></div>'
+        + '<div class="vend-bar"><span style="width:'+Math.round(d.total*100/maxT)+'%"></span></div>'
+        + '<div class="vend-sub">'+d.notas+' nota'+(d.notas===1?'':'s')+' · cobrado '+fmt(d.cobrado)+(d.pendiente>0.009 ? ' · <span style="color:var(--danger);">por cobrar '+fmt(d.pendiente)+'</span>' : '')+'</div>'
+        + '</div>';
+    }).join("");
+    return '<details class="month vend-box" open><summary>Ventas por vendedor · '+escapeHtml(titulo)+' <span class="chev">▾</span></summary><div class="day-block">'+filas+'</div></details>';
+  }
+
   function viewResumen(){
     var anios = {}; state.ventas.forEach(function(v){ if(v.anio) anios[v.anio] = true; });
     anios[(new Date()).getFullYear()] = true; anios[ui.resumenYear] = true;
@@ -1494,6 +1531,7 @@
         + '<h1 class="section-title">Resumen de ingresos</h1>'
         + '<p class="section-sub">Cuánto ingresó cada mes, sin IGV. Usa las flechas para cambiar de año o entrar a un mes.</p>'
         + toolbar
+        + ventasPorVendedorHtml(ventasYear, 'año '+ui.resumenYear)
         + '<div class="stat-row">'
         + '  <div class="stat hi"><div class="label">Total '+ui.resumenYear+'</div><div class="value">'+fmt(totalYear)+'</div></div>'
         + '  <div class="stat"><div class="label">Promedio mensual</div><div class="value">'+fmt(promedio)+'</div></div>'
@@ -1541,6 +1579,7 @@
         + '<p class="section-sub">Detalle de un día en particular.</p>'
         + toolbar
         + vistaToggle
+        + ventasPorVendedorHtml(ventasDia, fechaDisplay(diaSel))
         + '<div class="field" style="max-width:220px;"><label for="resumen-dia-picker">📅 Elegir día del calendario</label><input id="resumen-dia-picker" type="date" value="'+diaSel+'" min="'+ui.resumenYear+'-'+String(ui.resumenMonth).padStart(2,"0")+'-01" max="'+ui.resumenYear+'-'+String(ui.resumenMonth).padStart(2,"0")+'-'+String(new Date(ui.resumenYear, ui.resumenMonth, 0).getDate()).padStart(2,"0")+'"></div>'
         + (!ventasDia.length ? '<p class="empty">Sin ventas registradas el '+fechaDisplay(diaSel)+'.</p>' : ''
           + '<div class="stat-row">'
@@ -1583,6 +1622,7 @@
         + '<p class="section-sub">Detalle semanal de '+monthLabel+' '+ui.resumenYear+'.</p>'
         + toolbar
         + vistaToggle
+        + ventasPorVendedorHtml(ventasMes, MESES[ui.resumenMonth-1]+' '+ui.resumenYear)
         + (notasMesW===0 ? '<p class="empty">Sin ventas registradas en '+monthLabel+' '+ui.resumenYear+'.</p>' : ''
           + '<div class="stat-row">'
           + '  <div class="stat hi"><div class="label">Total del mes</div><div class="value">'+fmt(totalMesW)+'</div></div>'
@@ -1625,6 +1665,7 @@
       + '<p class="section-sub">Detalle diario de '+monthLabel+' '+ui.resumenYear+'.</p>'
       + toolbar
       + vistaToggle
+      + ventasPorVendedorHtml(ventasMes, MESES[ui.resumenMonth-1]+' '+ui.resumenYear)
       + (notasMes===0 ? '<p class="empty">Sin ventas registradas en '+monthLabel+' '+ui.resumenYear+'.</p>' : ''
         + '<div class="stat-row">'
         + '  <div class="stat hi"><div class="label">Total del mes</div><div class="value">'+fmt(totalMes)+'</div></div>'
@@ -3036,6 +3077,10 @@
       }
     }
     else if(action==="gate-volver"){ logout(); }
+    else if(action==="gate-nombre-rapido"){
+      var gn = document.getElementById("gate-nombre"); if(gn) gn.value = t.getAttribute("data-nombre")||"";
+      var gp = document.getElementById("gate-password"); if(gp) gp.focus();
+    }
     else if(action==="confirmar-login"){
       var nomVal = document.getElementById("gate-nombre").value.trim();
       var passVal = document.getElementById("gate-password").value;
@@ -3056,7 +3101,11 @@
           }
           var yo = Object.assign({}, snap.data(), { id:snap.id, _synced:true });
           state.usuarios = [yo]; persist("usuarios");
-          try{ localStorage.setItem("lr_last_name_v1", yo.nombre); }catch(e){}
+          try{
+            localStorage.setItem("lr_last_name_v1", yo.nombre);
+            var rec = JSON.parse(localStorage.getItem("lr_recent_names_v1") || "[]").filter(function(n){ return n!==yo.nombre; });
+            rec.unshift(yo.nombre); localStorage.setItem("lr_recent_names_v1", JSON.stringify(rec.slice(0,6)));
+          }catch(e){}
           ui.gateSelectedId = yo.id; ui.gateMode = "pin"; ui.gateError = ""; ui.gateNombre = "";
           renderGate();
         });
