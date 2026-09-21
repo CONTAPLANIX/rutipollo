@@ -465,7 +465,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v12";
+  var APP_VERSION = "21 sep · v13";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2160,6 +2160,7 @@
       + '      <div id="bt-status" class="section-sub" style="width:100%;text-align:center;margin:0;min-height:1em;"></div>'
       + '      <button class="btn" data-action="cerrar-overlay">Cerrar</button>'
       + '      <button class="btn" data-action="descargar-pdf-ticket">⬇ Descargar PDF</button>'
+      + '      <button class="btn" data-action="imagen-ticket">🖼 Imagen (WhatsApp)</button>'
       + '      <button class="btn btn-primary" data-action="compartir-pdf-ticket">📤 Compartir / Imprimir</button>'
       + '      <button class="btn btn-primary" data-action="imprimir-directo">🖨 Imprimir directo</button>'
       + (venta.id && puedeGestionar() ? '      <button class="btn" data-action="editar-venta" data-id="'+venta.id+'">Editar</button>' : '')
@@ -2378,8 +2379,8 @@
   }
 
   // Un "doc" de canvas con la misma interfaz minima que usa drawTicketOnDoc (jsPDF), en milimetros.
-  function CanvasDoc(anchoMm, altoMm){
-    this.k = 8; // puntos por mm (203 dpi)
+  function CanvasDoc(anchoMm, altoMm, k){
+    this.k = k || 8; // puntos por mm (203 dpi por defecto)
     this.c = document.createElement("canvas");
     this.c.width = Math.round(anchoMm * this.k);
     this.c.height = Math.max(1, Math.round(altoMm * this.k));
@@ -2552,10 +2553,10 @@
   }
 
   // Dibuja la nota en un canvas: primero se mide, luego se dibuja con el alto exacto.
-  function notaACanvasDoc(venta, logoImg, direccionTexto){
-    var medida = new CanvasDoc(80, 10); medida.logoImg = logoImg;
-    var alto = drawTicketOnDoc(medida, venta, logoImg ? "logo" : null, direccionTexto) + 12;
-    var cd = new CanvasDoc(80, alto); cd.logoImg = logoImg;
+  function notaACanvasDoc(venta, logoImg, direccionTexto, k){
+    var medida = new CanvasDoc(80, 10, k); medida.logoImg = logoImg;
+    var alto = drawTicketOnDoc(medida, venta, logoImg ? "logo" : null, direccionTexto) + 6;
+    var cd = new CanvasDoc(80, alto, k); cd.logoImg = logoImg;
     drawTicketOnDoc(cd, venta, logoImg ? "logo" : null, direccionTexto);
     return cd;
   }
@@ -2587,6 +2588,28 @@
       if(e && e.name === "NotFoundError") return;
       alert("No se pudo imprimir: "+btErrorTexto(e));
     });
+  }
+
+  // Nota como foto (PNG) para mandar por WhatsApp: se comparte si el celular lo permite; si no, se descarga.
+  function compartirImagenTicket(venta){
+    var nombre = "nota_"+String(venta.correlativo).padStart(6,"0")+".png";
+    btEstado("Preparando la imagen…");
+    var dirP = venta.ubicacion ? reverseGeocode(venta.ubicacion) : Promise.resolve(null);
+    Promise.all([conLogoDataUrl().then(cargarImagen), dirP]).then(function(res){
+      var cd = notaACanvasDoc(venta, res[0], res[1], 14);
+      return new Promise(function(ok){ cd.c.toBlob(ok, "image/png"); });
+    }).then(function(blob){
+      btEstado("");
+      if(!blob){ alert("No se pudo crear la imagen."); return; }
+      var file = new File([blob], nombre, { type:"image/png" });
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        navigator.share({ files:[file], title:"Nota de venta N° "+String(venta.correlativo).padStart(6,"0") }).catch(function(err){
+          if(err && err.name!=="AbortError") triggerDownload(nombre, blob);
+        });
+      } else {
+        triggerDownload(nombre, blob);
+      }
+    }).catch(function(e){ btEstado(""); alert("No se pudo crear la imagen: "+((e && e.message) || e)); });
   }
 
   function probarImpresora(){
@@ -2828,6 +2851,7 @@
     }
     else if(action==="cerrar-overlay"){ if(e.target===t || e.target.classList.contains("overlay")) closeOverlay(); }
     else if(action==="imprimir-ticket"){ imprimirTicketAjustado(); }
+    else if(action==="imagen-ticket"){ if(currentTicketVenta) compartirImagenTicket(currentTicketVenta); }
     else if(action==="imprimir-directo"){ if(currentTicketVenta) imprimirDirecto(currentTicketVenta); }
     else if(action==="bt-probar"){ probarImpresora(); }
     else if(action==="compartir-pdf-ticket"){ if(currentTicketVenta) compartirPdfTicket(currentTicketVenta); }
