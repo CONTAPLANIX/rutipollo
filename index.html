@@ -476,7 +476,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v20";
+  var APP_VERSION = "21 sep · v21";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1525,6 +1525,7 @@
   }
 
   function viewResumen(){
+    var monthLabel = ui.resumenMonth===0 ? "Todo el año" : MESES[ui.resumenMonth-1];
     var anios = {}; state.ventas.forEach(function(v){ if(v.anio) anios[v.anio] = true; });
     anios[(new Date()).getFullYear()] = true; anios[ui.resumenYear] = true;
     var yearStepper = '<label class="sel-wrap"><span>Año</span><select class="year-select" id="resumen-year">'
