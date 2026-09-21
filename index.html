@@ -444,7 +444,7 @@
   };
 
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
-  var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: 0, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
+  var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: (new Date()).getMonth()+1, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
     gateMode: "login", gateSelectedId: null, gateError: "", soloMisVentas: false,
     cobrarVista: "pendientes", cobrarBuscar: "", clientesBuscar: "", productosBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
 
@@ -469,7 +469,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v16";
+  var APP_VERSION = "21 sep · v17";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1541,7 +1541,7 @@
         + '<p class="section-sub">Detalle de un día en particular.</p>'
         + toolbar
         + vistaToggle
-        + '<div class="field" style="max-width:220px;"><label for="resumen-dia-picker">Elegir día</label><input id="resumen-dia-picker" type="date" value="'+diaSel+'"></div>'
+        + '<div class="field" style="max-width:220px;"><label for="resumen-dia-picker">📅 Elegir día del calendario</label><input id="resumen-dia-picker" type="date" value="'+diaSel+'" min="'+ui.resumenYear+'-'+String(ui.resumenMonth).padStart(2,"0")+'-01" max="'+ui.resumenYear+'-'+String(ui.resumenMonth).padStart(2,"0")+'-'+String(new Date(ui.resumenYear, ui.resumenMonth, 0).getDate()).padStart(2,"0")+'"></div>'
         + (!ventasDia.length ? '<p class="empty">Sin ventas registradas el '+fechaDisplay(diaSel)+'.</p>' : ''
           + '<div class="stat-row">'
           + '  <div class="stat hi"><div class="label">Total del día</div><div class="value">'+fmt(totalDia)+'</div></div>'
@@ -3155,7 +3155,13 @@
     else if(t.id==="bt-grueso"){ try{ localStorage.setItem("lr_printer_bold_v1", t.checked ? "si" : "no"); }catch(e){} }
     else if(t.id==="bt-lang"){ try{ localStorage.setItem(BT_KEY_LANG, t.value); }catch(e){} }
     else if(t.id==="resumen-year"){ ui.resumenYear = Number(t.value); renderTab(); }
-    else if(t.id==="resumen-month"){ ui.resumenMonth = Number(t.value); ui.resumenDiaSel = null; renderTab(); }
+    else if(t.id==="resumen-month"){
+      ui.resumenMonth = Number(t.value);
+      var hoyR = new Date();
+      ui.resumenDiaSel = (ui.resumenMonth && (ui.resumenYear!==hoyR.getFullYear() || ui.resumenMonth!==hoyR.getMonth()+1))
+        ? ui.resumenYear+"-"+String(ui.resumenMonth).padStart(2,"0")+"-01" : null;
+      renderTab();
+    }
     else if(t.id==="hist-year"){ ui.historialYear = Number(t.value); ui.selectMode=false; ui.selected={}; renderTab(); }
     else if(t.id==="resumen-dia-picker"){ ui.resumenDiaSel = t.value; renderTab(); }
     else if(t.classList && t.classList.contains("item-input") && t.getAttribute("data-field")==="producto"){
