@@ -476,7 +476,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v19";
+  var APP_VERSION = "21 sep · v20";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1273,28 +1273,40 @@
       return;
     }
 
-    var ultimo = "", recientes = [];
+    var nombres = [];
     try{
-      ultimo = localStorage.getItem("lr_last_name_v1") || "";
-      recientes = (state.nombresPublicos && state.nombresPublicos.length) ? state.nombresPublicos.slice() : JSON.parse(localStorage.getItem("lr_public_names_v1") || "[]");
-      if(!recientes.length) recientes = JSON.parse(localStorage.getItem("lr_recent_names_v1") || "[]");
+      nombres = (state.nombresPublicos && state.nombresPublicos.length) ? state.nombresPublicos.slice() : JSON.parse(localStorage.getItem("lr_public_names_v1") || "[]");
+      if(!nombres.length) nombres = JSON.parse(localStorage.getItem("lr_recent_names_v1") || "[]");
     }catch(e){}
-    var chips = recientes.length ? '<div class="user-grid" style="margin-bottom:6px;">' + recientes.map(function(n){
-        return '<button class="user-chip" data-action="gate-nombre-rapido" data-nombre="'+escapeHtml(n)+'" data-initial="'+escapeHtml(n.trim().charAt(0).toUpperCase())+'">'+escapeHtml(n)+'</button>';
-      }).join("") + '</div>' : '';
+    var elegido = ui.gateNombre || "";
+
+    // Paso 1: elegir usuario con un toque (si hay nombres). Paso 2: contraseña.
+    if(nombres.length && !elegido && !ui.gateEscribir){
+      root.innerHTML = '<div class="gate">'
+        + logo
+        + '<h1 class="section-title" style="margin:0;">¿Quién eres?</h1>'
+        + '<div class="user-grid">' + nombres.map(function(n){
+            return '<button class="user-chip" data-action="gate-nombre-rapido" data-nombre="'+escapeHtml(n)+'" data-initial="'+escapeHtml(n.trim().charAt(0).toUpperCase())+'">'+escapeHtml(n)+'</button>';
+          }).join("") + '</div>'
+        + '<div class="pin-error" id="gate-error">'+escapeHtml(ui.gateError)+'</div>'
+        + '<button class="btn btn-sm" data-action="gate-escribir">Mi nombre no aparece</button>'
+        + '</div>';
+      return;
+    }
+
     root.innerHTML = '<div class="gate">'
       + logo
-      + '<h1 class="section-title" style="margin:0;">Iniciar sesión</h1>'
-      + '<p class="gate-note">'+(recientes.length ? 'Toca tu nombre y escribe tu contraseña.' : 'Escribe tu nombre y tu contraseña.')+'</p>'
-      + chips
+      + '<h1 class="section-title" style="margin:0;">'+(elegido ? 'Hola, '+escapeHtml(elegido) : 'Iniciar sesión')+'</h1>'
+      + '<p class="gate-note">'+(elegido ? 'Escribe tu contraseña.' : 'Escribe tu nombre y tu contraseña.')+'</p>'
       + '<div class="gate-form">'
-      + '  <input id="gate-nombre" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Tu nombre" maxlength="40" value="'+escapeHtml(ui.gateNombre||ultimo)+'">'
+      + '  <input id="gate-nombre" type="'+(elegido ? 'hidden' : 'text')+'" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Tu nombre" maxlength="40" value="'+escapeHtml(elegido)+'">'
       + '  <input id="gate-password" type="password" autocomplete="current-password" placeholder="Contraseña">'
       + '  <div class="pin-error" id="gate-error">'+escapeHtml(ui.gateError)+'</div>'
       + '  <button class="btn btn-primary" data-action="confirmar-login">Entrar</button>'
+      + (nombres.length ? '  <button class="btn btn-sm" data-action="gate-otro">← Elegir otro usuario</button>' : '')
       + '</div>'
       + '</div>';
-    var focoEl = document.getElementById((ui.gateNombre||ultimo) ? "gate-password" : "gate-nombre");
+    var focoEl = document.getElementById(elegido ? "gate-password" : "gate-nombre");
     if(focoEl) focoEl.focus();
   }
 
@@ -3095,14 +3107,13 @@
       }
     }
     else if(action==="gate-volver"){ logout(); }
-    else if(action==="gate-nombre-rapido"){
-      var gn = document.getElementById("gate-nombre"); if(gn) gn.value = t.getAttribute("data-nombre")||"";
-      var gp = document.getElementById("gate-password"); if(gp) gp.focus();
-    }
+    else if(action==="gate-nombre-rapido"){ ui.gateNombre = t.getAttribute("data-nombre")||""; ui.gateError = ""; renderGate(); }
+    else if(action==="gate-escribir"){ ui.gateEscribir = true; ui.gateError = ""; renderGate(); }
+    else if(action==="gate-otro"){ ui.gateNombre = ""; ui.gateEscribir = false; ui.gateError = ""; renderGate(); }
     else if(action==="confirmar-login"){
       var nomVal = document.getElementById("gate-nombre").value.trim();
       var passVal = document.getElementById("gate-password").value;
-      ui.gateNombre = nomVal;
+      ui.gateNombre = nomVal; ui.gateEscribir = false;
       var mail = emailDeNombre(nomVal);
       if(!mail || !passVal){ ui.gateError = "Escribe tu nombre y tu contraseña."; renderGate(); return; }
       if(!state.db || !window.firebase || !firebase.auth){ ui.gateError = "Sin conexión. Conéctate a internet para iniciar sesión."; renderGate(); return; }
