@@ -227,6 +227,10 @@
   tbody tr:last-child td{ border-bottom:none; }
   td input{ width:100%; background:transparent; border:none; border-bottom:1px solid transparent; padding:5px 2px; font-size:14px; color:var(--ink); }
   td input:focus{ border-bottom-color:var(--focus); }
+  .item-cod{ display:inline-block; min-width:44px; font-size:12px; font-weight:600; color:var(--accent); margin-right:6px; vertical-align:middle; }
+  .item-cod:empty{ display:none; }
+  .ac-wrap{ display:flex; align-items:center; }
+  .ac-wrap input{ flex:1; min-width:0; }
   .col-cant{ width:78px; } .col-kg{ width:84px; } .col-precio{ width:110px; } .col-sub{ width:110px; } .col-del{ width:38px; }
   /* En celular cada producto es una tarjeta: nombre arriba y Cant / Kg / P.unit / Importe abajo, todo visible. */
   @media (max-width:700px){
@@ -465,7 +469,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v13";
+  var APP_VERSION = "21 sep · v14";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1273,7 +1277,7 @@
   function itemRowHtml(item, idx){
     var sub = subtotalItem(item);
     return '<tr data-row="'+idx+'">'
-      + '<td><div class="ac-wrap"><input class="item-input" autocomplete="off" data-idx="'+idx+'" data-field="producto" value="'+escapeHtml(item.producto)+'" placeholder="Nombre o código del producto"><div class="ac-list" id="ac-item-'+idx+'" hidden></div></div></td>'
+      + '<td><div class="ac-wrap"><span class="item-cod mono" id="item-cod-'+idx+'">'+escapeHtml(codigoItem(item)||"")+'</span><input class="item-input" autocomplete="off" data-idx="'+idx+'" data-field="producto" value="'+escapeHtml(item.producto)+'" placeholder="Nombre o código del producto"><div class="ac-list" id="ac-item-'+idx+'" hidden></div></div></td>'
       + '<td class="col-cant" data-label="Cant."><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="cantidad" value="'+item.cantidad+'"></td>'
       + '<td class="col-kg" data-label="Kg"><input class="item-input" type="number" min="0" step="any" data-idx="'+idx+'" data-field="kg" placeholder="kg" value="'+(item.kg===undefined||item.kg===null?"":item.kg)+'"></td>'
       + '<td class="col-precio" data-label="P. unit."><input class="item-input" type="number" min="0" step="0.01" data-idx="'+idx+'" data-field="precio" value="'+item.precio+'"></td>'
@@ -2555,7 +2559,7 @@
   // Dibuja la nota en un canvas: primero se mide, luego se dibuja con el alto exacto.
   function notaACanvasDoc(venta, logoImg, direccionTexto, k){
     var medida = new CanvasDoc(80, 10, k); medida.logoImg = logoImg;
-    var alto = drawTicketOnDoc(medida, venta, logoImg ? "logo" : null, direccionTexto) + 6;
+    var alto = drawTicketOnDoc(medida, venta, logoImg ? "logo" : null, direccionTexto) + 4;
     var cd = new CanvasDoc(80, alto, k); cd.logoImg = logoImg;
     drawTicketOnDoc(cd, venta, logoImg ? "logo" : null, direccionTexto);
     return cd;
@@ -3073,7 +3077,7 @@
       var field = t.getAttribute("data-field");
       if(!draft.items[idx]) return;
       draft.items[idx][field] = field==="producto" ? t.value : Number(t.value);
-      if(field==="producto") delete draft.items[idx].codigo;
+      if(field==="producto"){ delete draft.items[idx].codigo; var codEl = document.getElementById("item-cod-"+idx); if(codEl) codEl.textContent = codigoDeProducto(t.value); }
       var sub = subtotalItem(draft.items[idx]);
       var subEl = document.getElementById("subtotal-"+idx);
       if(subEl) subEl.textContent = fmt(sub);

@@ -1,4 +1,4 @@
-var CACHE_NAME = "rutipollo-v3";
+var CACHE_NAME = "rutipollo-v4";
 var PRECACHE_URLS = [
   "./",
   "./index.html",
