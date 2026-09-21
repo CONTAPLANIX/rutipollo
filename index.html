@@ -444,7 +444,7 @@
     ventas: [],
     productos: [],
     clientes: [],
-    usuarios: [],
+    usuarios: [], nombresPublicos: [],
     negocio: { nombre: "Rico Pollo Dissur", telefono: "", pie: "Gracias por su Compra. ¡Hasta la próxima entrega!", logo: "assets/logo.png" },
     db: null,
     dbReady: false
@@ -476,7 +476,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v18";
+  var APP_VERSION = "21 sep · v19";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -960,6 +960,13 @@
         state.db = db;
         state.dbReady = true;
 
+        db.doc("publico/nombres").onSnapshot(function(snap){
+          var d = snap.exists ? snap.data() : null;
+          state.nombresPublicos = (d && Array.isArray(d.nombres)) ? d.nombres : [];
+          try{ localStorage.setItem("lr_public_names_v1", JSON.stringify(state.nombresPublicos)); }catch(e){}
+          if(!currentUser && ui.gateMode==="login") renderGate();
+        }, function(){});
+
         var datosPrivadosConectados = false;
         function conectarDatosPrivados(uid){
           if(datosPrivadosConectados) return;
@@ -1183,6 +1190,13 @@
   function aplicarUsuariosRemotos(lista, uid){
     state.usuarios = lista;
     persist("usuarios");
+    var yoAdm = lista.find(function(u){ return u.id===uid; });
+    if(yoAdm && esAdmin(yoAdm) && state.db){
+      var nombres = lista.map(function(u){ return u.nombre; }).filter(Boolean).sort();
+      if(JSON.stringify(nombres) !== JSON.stringify(state.nombresPublicos||[])){
+        state.db.doc("publico/nombres").set({ nombres:nombres }).catch(function(){});
+      }
+    }
     var yo = lista.find(function(u){ return u.id===uid; });
     if(currentUser && yo){
       currentUser = { id:yo.id, nombre:yo.nombre, rol:yo.rol||"vendedor" };
@@ -1260,14 +1274,18 @@
     }
 
     var ultimo = "", recientes = [];
-    try{ ultimo = localStorage.getItem("lr_last_name_v1") || ""; recientes = JSON.parse(localStorage.getItem("lr_recent_names_v1") || "[]"); }catch(e){}
+    try{
+      ultimo = localStorage.getItem("lr_last_name_v1") || "";
+      recientes = (state.nombresPublicos && state.nombresPublicos.length) ? state.nombresPublicos.slice() : JSON.parse(localStorage.getItem("lr_public_names_v1") || "[]");
+      if(!recientes.length) recientes = JSON.parse(localStorage.getItem("lr_recent_names_v1") || "[]");
+    }catch(e){}
     var chips = recientes.length ? '<div class="user-grid" style="margin-bottom:6px;">' + recientes.map(function(n){
         return '<button class="user-chip" data-action="gate-nombre-rapido" data-nombre="'+escapeHtml(n)+'" data-initial="'+escapeHtml(n.trim().charAt(0).toUpperCase())+'">'+escapeHtml(n)+'</button>';
       }).join("") + '</div>' : '';
     root.innerHTML = '<div class="gate">'
       + logo
       + '<h1 class="section-title" style="margin:0;">Iniciar sesión</h1>'
-      + '<p class="gate-note">'+(recientes.length ? 'Toca tu nombre o escríbelo, y pon tu contraseña.' : 'Escribe tu nombre y tu contraseña.')+'</p>'
+      + '<p class="gate-note">'+(recientes.length ? 'Toca tu nombre y escribe tu contraseña.' : 'Escribe tu nombre y tu contraseña.')+'</p>'
       + chips
       + '<div class="gate-form">'
       + '  <input id="gate-nombre" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Tu nombre" maxlength="40" value="'+escapeHtml(ui.gateNombre||ultimo)+'">'
