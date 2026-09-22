@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "22 sep · v31";
+  var APP_VERSION = "22 sep · v32";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2366,7 +2366,13 @@
     "49535343-fe7d-4ae5-8fa9-9fafd205e455", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"]);
   var btPrinter = { device:null, char:null };
   var BT_KEY_LANG = "lr_printer_lang_v1";
-  function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2" || v==="ESCPOSTXT") ? v : "ESCPOS"; }
+    function btLangKey(){ var n = (btPrinter.device && btPrinter.device.name) || ""; try{ if(!n) n = localStorage.getItem("lr_printer_last_v1") || ""; }catch(e){} return n ? BT_KEY_LANG+":"+n : BT_KEY_LANG; }
+  function btLang(){
+    var v = "";
+    try{ v = localStorage.getItem(btLangKey()) || localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){}
+    return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2" || v==="ESCPOSTXT") ? v : "ESCPOS";
+  }
+  function btNombreImpresora(){ var n = (btPrinter.device && btPrinter.device.name) || ""; try{ if(!n) n = localStorage.getItem("lr_printer_last_v1") || ""; }catch(e){} return n; }
 
   // Envio "seguro" (con confirmacion, trozos chicos) por defecto: a algunas impresoras el modo rapido las desborda.
   function btRapido(){ var v = ""; try{ v = localStorage.getItem("lr_printer_fast_v1") || ""; }catch(e){} return v === "si"; }
@@ -2468,6 +2474,7 @@
       : etapa("elegir impresora", pedirDispositivo(info));
     return pedir.then(function(dev){
       btPrinter.device = dev;
+      try{ if(dev.name) localStorage.setItem("lr_printer_last_v1", dev.name); }catch(e){}
       dev.addEventListener("gattserverdisconnected", function(){ btPrinter.char = null; });
       btEstado("Conectando con "+(dev.name||"la impresora")+"…");
       info.push("dispositivo "+(dev.name||"sin nombre"));
@@ -2655,15 +2662,16 @@
       var out = [new Uint8Array([0x1b, 0x40, 0x1b, 0x61, 0x00, 0x1b, 0x33, 0x18])];
       for(var y0 = 0; y0 < r.h; y0 += 24){
         var cab = new Uint8Array([0x1b, 0x2a, 0x21, r.w & 255, (r.w >> 8) & 255]);
-        var cuerpo = new Uint8Array(r.w * 3);
+        var cuerpo = new Uint8Array(r.w * 3), hayTinta = false;
         for(var xx = 0; xx < r.w; xx++){
           for(var k = 0; k < 24; k++){
             var yy = y0 + k;
             if(yy >= r.h) break;
-            if(r.bits[yy * r.bpr + (xx >> 3)] & (0x80 >> (xx & 7))) cuerpo[xx * 3 + (k >> 3)] |= (0x80 >> (k & 7));
+            if(r.bits[yy * r.bpr + (xx >> 3)] & (0x80 >> (xx & 7))){ cuerpo[xx * 3 + (k >> 3)] |= (0x80 >> (k & 7)); hayTinta = true; }
           }
         }
-        out.push(cab, cuerpo, new Uint8Array([0x0a]));
+        if(hayTinta) out.push(cab, cuerpo, new Uint8Array([0x0a]));
+        else out.push(new Uint8Array([0x1b, 0x4a, 24])); // banda en blanco: solo avanzar
       }
       out.push(new Uint8Array([0x1b, 0x32, 0x1b, 0x64, 0x04]));
       return unir(out);
@@ -2950,7 +2958,7 @@
       + '    <div class="actions-row" style="justify-content:space-between;align-items:center;"><span>Sesión de <strong>'+escapeHtml(currentUser?currentUser.nombre:"")+'</strong></span><button class="btn btn-danger" data-action="cerrar-sesion">Cerrar sesión</button></div>'
       + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
       + '    <h2 style="font-size:15px;">Impresora Bluetooth <span class="pay-tag efectivo" style="font-weight:400;">versión '+APP_VERSION+'</span></h2>'
-      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="ESCPOSTXT"'+(btLang()==="ESCPOSTXT"?" selected":"")+'>Recibo texto rápido (en prueba)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo ESC/POS compatible</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
+      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora'+(btNombreImpresora() ? ' <span class="pay-tag banco">'+escapeHtml(btNombreImpresora())+'</span>' : '')+'</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="ESCPOSTXT"'+(btLang()==="ESCPOSTXT"?" selected":"")+'>Recibo texto rápido (en prueba)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo por líneas (para ITC-810P)</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
       + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-grueso"'+(btGrueso()?" checked":"")+'> Letra más gruesa y oscura</label>'
       + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-rapido"'+(btRapido()?" checked":"")+'> Envío rápido (si sale texto raro a media nota, desmárcalo)</label>'
       + '    <div class="actions-row" style="justify-content:flex-start;margin-top:8px;"><button class="btn btn-sm" data-action="bt-probar">🖨 Hoja de prueba</button></div>'
@@ -3415,7 +3423,7 @@
     }
     else if(t.id==="bt-rapido"){ try{ localStorage.setItem("lr_printer_fast_v1", t.checked ? "si" : "no"); }catch(e){} }
     else if(t.id==="bt-grueso"){ try{ localStorage.setItem("lr_printer_bold_v1", t.checked ? "si" : "no"); }catch(e){} }
-    else if(t.id==="bt-lang"){ try{ localStorage.setItem(BT_KEY_LANG, t.value); }catch(e){} }
+    else if(t.id==="bt-lang"){ try{ localStorage.setItem(btLangKey(), t.value); localStorage.setItem(BT_KEY_LANG, t.value); }catch(e){} }
     else if(t.id==="resumen-year"){ ui.resumenYear = Number(t.value); renderTab(); }
     else if(t.id==="resumen-month"){
       ui.resumenMonth = Number(t.value);
