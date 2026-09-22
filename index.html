@@ -476,7 +476,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v23";
+  var APP_VERSION = "21 sep · v24";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2305,6 +2305,7 @@
     var fr = document.createElement("iframe");
     fr.setAttribute("aria-hidden", "true");
     fr.style.cssText = "position:fixed;left:-10000px;top:0;width:80mm;height:4000px;border:0;visibility:hidden;";
+    // Nota: el largo de hoja lo decide el driver de la impresora; asi el driver no centra la nota y no deja blanco arriba.
     document.body.appendChild(fr);
     var d = fr.contentWindow.document;
     d.open();
@@ -2317,7 +2318,7 @@
       var t = d.querySelector(".ticket");
       var px = t ? t.getBoundingClientRect().bottom : 0;
       var mm = Math.max(40, Math.ceil(px * 25.4 / 96) + 1);
-      d.getElementById("pg").textContent = "@page{ size:80mm "+mm+"mm; margin:0; }";
+      d.getElementById("pg").textContent = "@page{ size:auto; margin:0; } html,body{ margin:0 !important; padding:0 !important; height:auto !important; } .ticket{ padding-top:1mm !important; } .modal, .overlay, #overlay-root{ padding-top:0 !important; margin-top:0 !important; }";
       cuandoListo(fr, mm);
     }
     var imgs = Array.prototype.slice.call(d.images || []);
