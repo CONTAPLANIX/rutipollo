@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "22 sep · v27";
+  var APP_VERSION = "22 sep · v28";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2626,7 +2626,9 @@
       var partes = [new Uint8Array([0x1b, 0x40, 0x1b, 0x61, 0x00])];
       // Las filas en blanco no se mandan como imagen: se manda "avanzar N puntos" (mucho menos datos).
       var esBlanca = function(y){ var o = y * r.bpr; for(var i = 0; i < r.bpr; i++){ if(r.bits[o + i]) return false; } return true; };
-      var y0 = 0, bandaMax = 160;
+      // Cada bloque de filas con tinta va completo en un solo comando: la impresora solo se detiene
+      // entre bloques, y como entre bloque y bloque hay filas blancas, la parada no deja rayas.
+      var y0 = 0, bandaMax = 4000;
       while(y0 < r.h){
         if(esBlanca(y0)){
           var nb = 0; while(y0 + nb < r.h && esBlanca(y0 + nb)) nb++;
