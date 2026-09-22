@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "22 sep · v34";
+  var APP_VERSION = "22 sep · v35";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -846,6 +846,7 @@
       } else {
         var idx = state.ventas.findIndex(function(v){ return v.id===ch.doc.id; });
         var data = Object.assign({}, ch.doc.data(), { id:ch.doc.id, _synced:true });
+        if(data.eliminado){ if(idx>-1) state.ventas.splice(idx, 1); return; }
         if(idx>-1) state.ventas[idx] = data; else state.ventas.push(data);
       }
     });
@@ -894,11 +895,14 @@
     }
     ultimoErrorSync = "";
 
-    pendingDeletes.ventas.slice().forEach(function(id){
-      db.doc("ventas/"+id).delete().then(function(){
-        pendingDeletes.ventas = pendingDeletes.ventas.filter(function(x){return x!==id;});
+    pendingDeletes.ventas.slice().forEach(function(p){
+      var pid = (p && p.id) || p;
+      var body = (p && p.marca) ? Object.assign({}, p.marca) : { eliminado:true, eliminadoPor:(currentUser?currentUser.nombre:""), eliminadoEn:Date.now() };
+      delete body.id; delete body._synced;
+      db.doc("ventas/"+pid).set(body, { merge:true }).then(function(){
+        pendingDeletes.ventas = pendingDeletes.ventas.filter(function(x){ return ((x && x.id) || x)!==pid; });
         persistPending(); refreshSyncBadge();
-      }).catch(function(){});
+      }).catch(anotarErrorSync);
     });
     pendingDeletes.productos.slice().forEach(function(id){
       db.doc("productos/"+id).delete().then(function(){
@@ -1075,7 +1079,12 @@
     var v = state.ventas.find(function(x){ return x.id===id; });
     state.ventas = state.ventas.filter(function(x){ return x.id!==id; });
     persist("ventas");
-    if(v && v._synced){ pendingDeletes.ventas.push(id); persistPending(); }
+    if(v){
+      // Se guarda como "eliminada" (oculta) con quien y cuando; el documento no se borra del servidor.
+      var marca = Object.assign({}, v, { eliminado:true, eliminadoPor:(currentUser?currentUser.nombre:""), eliminadoEn:Date.now() });
+      delete marca._synced;
+      pendingDeletes.ventas.push({ id:id, marca:marca }); persistPending();
+    }
     renderTab();
     refreshSyncBadge();
     syncPending();
