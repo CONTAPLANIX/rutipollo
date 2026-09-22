@@ -343,6 +343,8 @@
   .ticket .total{ display:flex; justify-content:space-between; font-size:16px; font-weight:600; margin-top:10px; }
   .ticket .pago-bloque{ margin-top:8px; padding-top:6px; border-top:1px dashed var(--line); }
   .ticket .foot{ text-align:center; font-size:11px; color:var(--ink-soft); margin-top:14px; }
+  .ticket .foot.pedidos{ margin-top:8px; color:var(--ink); font-size:12px; }
+  .ticket .foot.pedidos strong{ font-size:13px; }
   .ticket .legal{ text-align:center; font-size:9.5px; color:var(--ink-soft); margin-top:6px; }
   .ticket-actions{ display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap; }
 
@@ -445,7 +447,7 @@
     productos: [],
     clientes: [],
     usuarios: [], nombresPublicos: [],
-    negocio: { nombre: "Rico Pollo Dissur", telefono: "", pie: "Gracias por su Compra. ¡Hasta la próxima entrega!", logo: "assets/logo.png" },
+    negocio: { nombre: "Rico Pollo Dissur", telefono: "", pie: "Gracias por su Compra. ¡Hasta la próxima entrega!", pedidos: "972717155 | 937355968", logo: "assets/logo.png" },
     db: null,
     dbReady: false
   };
@@ -476,11 +478,18 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v25";
+  var APP_VERSION = "22 sep · v26";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
     return t.split(/\n|\.\s+/).map(function(x){ return x.trim().replace(/\.$/, ""); }).filter(Boolean);
+  }
+  // Linea "Pedidos al:" con los celulares (configurable). En PDF sin emoji (la fuente no lo tiene).
+  function pedidosTexto(){ var p = String(state.negocio.pedidos === undefined ? "972717155 | 937355968" : state.negocio.pedidos).trim(); return p; }
+  function pedidosLineas(conEmoji){
+    var p = pedidosTexto(); if(!p) return [];
+    var nums = p.split(/[|,;]/).map(function(x){ return x.trim(); }).filter(Boolean);
+    return ["Pedidos al:", nums.map(function(n){ return (conEmoji ? "📲 " : "") + n; }).join("  |  ")];
   }
   function numTxt(n){ return String(Number((Number(n)||0).toFixed(3))); }
 
@@ -2134,6 +2143,12 @@
     pieLineas().forEach(function(l){ pieLines = pieLines.concat(doc.splitTextToSize(l, w)); });
     doc.text(pieLines, x+w/2, y, {align:"center"});
     y += pieLines.length*3.8;
+    var ped = pedidosLineas(false);
+    if(ped.length){
+      y += 1.5;
+      doc.setFont("courier","bold"); doc.setFontSize(9); doc.text(ped[0], x+w/2, y, {align:"center"}); y += 4.2;
+      doc.setFont("courier","bold"); doc.setFontSize(10); doc.text(ped[1], x+w/2, y, {align:"center"}); y += 4.5;
+    }
     return y;
   }
 
@@ -2264,6 +2279,7 @@
       + '      <div class="pago-bloque">'+pagoLineas(venta).map(function(r){ return '<div class="meta"><span>'+escapeHtml(r[0])+'</span><span>'+escapeHtml(r[1])+'</span></div>'; }).join("")+'</div>'
       + (venta.notas ? '<div class="foot">'+escapeHtml(venta.notas)+'</div>' : '')
       + '      <div class="foot">'+pieLineas().map(escapeHtml).join("<br>")+'</div>'
+      + (pedidosLineas(true).length ? '      <div class="foot pedidos">'+escapeHtml(pedidosLineas(true)[0])+'<br><strong>'+escapeHtml(pedidosLineas(true)[1])+'</strong></div>' : '')
       + '    </div>'
       + '    <div class="ticket-actions">'
       + '      <div id="bt-status" class="section-sub" style="width:100%;text-align:center;margin:0;min-height:1em;"></div>'
@@ -2798,6 +2814,7 @@
       + '    <div class="field"><label for="a-telefono">Teléfono</label><input id="a-telefono" type="text" value="'+escapeHtml(n.telefono||"")+'"></div>'
       + '    <div class="field"><label for="a-direccion">Dirección / lugar de emisión</label><input id="a-direccion" type="text" placeholder="Ej: Av. Los Pollos 123, Lima" value="'+escapeHtml(n.direccion||"")+'"></div>'
       + '    <div class="field"><label for="a-pie">Mensaje al pie de la nota</label><input id="a-pie" type="text" value="'+escapeHtml(n.pie||"")+'"></div>'
+      + '    <div class="field"><label for="a-pedidos">Celulares para pedidos (separados con |)</label><input id="a-pedidos" type="text" value="'+escapeHtml(pedidosTexto())+'" placeholder="Ej: 972717155 | 937355968"></div>'
       + '    <div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cancelar</button><button class="btn btn-primary" data-action="guardar-ajustes">Guardar</button></div>'
       + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
       + '    <div class="actions-row" style="justify-content:space-between;align-items:center;"><span>Sesión de <strong>'+escapeHtml(currentUser?currentUser.nombre:"")+'</strong></span><button class="btn btn-danger" data-action="cerrar-sesion">Cerrar sesión</button></div>'
@@ -2979,7 +2996,8 @@
         nombre: document.getElementById("a-nombre").value.trim() || "Rico Pollo Dissur",
         telefono: document.getElementById("a-telefono").value.trim(),
         direccion: document.getElementById("a-direccion").value.trim(),
-        pie: document.getElementById("a-pie").value.trim() || "Gracias por su Compra. ¡Hasta la próxima entrega!"
+        pie: document.getElementById("a-pie").value.trim() || "Gracias por su Compra. ¡Hasta la próxima entrega!",
+        pedidos: document.getElementById("a-pedidos").value.trim()
       });
       saveNegocio(data);
       closeOverlay();
