@@ -476,7 +476,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "21 sep · v24";
+  var APP_VERSION = "21 sep · v25";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -3079,8 +3079,13 @@
     else if(action==="cobrar-month-prev"){ ui.cobrarMonth = ui.cobrarMonth===1 ? 12 : ui.cobrarMonth-1; if(ui.cobrarMonth===12) ui.cobrarYear--; renderTab(); }
     else if(action==="cobrar-month-next"){ ui.cobrarMonth = ui.cobrarMonth===12 ? 1 : ui.cobrarMonth+1; if(ui.cobrarMonth===1) ui.cobrarYear++; renderTab(); }
     else if(action==="cambiar-usuario"){
-      var okC = true; try{ okC = confirm("¿Cambiar de usuario?"); }catch(e){}
-      if(okC) logout();
+      // Confirmacion propia (la del sistema no funciona en algunos navegadores del celular).
+      var rootC = document.getElementById("overlay-root");
+      rootC.innerHTML = '<div class="overlay" data-action="cerrar-overlay"><div class="modal" style="max-width:340px;text-align:center;">'
+        + '<h2 style="margin-top:0;">¿Cerrar sesión?</h2>'
+        + '<p class="section-sub">Sesión de <strong>'+escapeHtml(currentUser?currentUser.nombre:"")+'</strong>. Para volver a entrar necesitarás internet.</p>'
+        + '<div class="actions-row" style="justify-content:center;"><button class="btn" data-action="cerrar-overlay">Cancelar</button><button class="btn btn-danger" data-action="cerrar-sesion">Cerrar sesión</button></div>'
+        + '</div></div>';
     }
     else if(action==="cerrar-sesion"){ logout(); }
     else if(action==="agregar-usuario"){
