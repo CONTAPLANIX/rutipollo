@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "22 sep · v28";
+  var APP_VERSION = "22 sep · v29";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2366,7 +2366,7 @@
     "49535343-fe7d-4ae5-8fa9-9fafd205e455", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"]);
   var btPrinter = { device:null, char:null };
   var BT_KEY_LANG = "lr_printer_lang_v1";
-  function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2") ? v : "ESCPOS"; }
+  function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2" || v==="ESCPOS") ? v : "ESCPOSTXT"; }
 
   // Envio "seguro" (con confirmacion, trozos chicos) por defecto: a algunas impresoras el modo rapido las desborda.
   function btRapido(){ var v = ""; try{ v = localStorage.getItem("lr_printer_fast_v1") || ""; }catch(e){} return v === "si"; }
@@ -2712,11 +2712,119 @@
     return t;
   }
 
+  // ---------- Recibo en modo TEXTO (rapido): la impresora usa su propia letra; solo el logo va como imagen ----------
+  var TXT_COLS = 48; // Fuente A de 12 puntos en 576 puntos de ancho
+
+  // Solo ASCII: estas impresoras interpretan los bytes altos como caracteres chinos.
+  function txtAscii(t){
+    return String(t == null ? "" : t).normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/°/g, "o").replace(/[¡¿]/g, "").replace(/[–—]/g, "-").replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+      .replace(/[^\x20-\x7e\n]/g, "?");
+  }
+  function txtPad(t, n){ t = String(t); return t.length >= n ? t.slice(0, n) : t + " ".repeat(n - t.length); }
+  function txtPadL(t, n){ t = String(t); return t.length >= n ? t.slice(-n) : " ".repeat(n - t.length) + t; }
+  function txtWrap(t, n){
+    var out = [];
+    txtAscii(t).split("\n").forEach(function(par){
+      var words = par.split(/\s+/).filter(Boolean), cur = "";
+      words.forEach(function(w){
+        while(w.length > n){ if(cur){ out.push(cur); cur = ""; } out.push(w.slice(0, n)); w = w.slice(n); }
+        var p = cur ? cur + " " + w : w;
+        if(p.length <= n) cur = p; else { out.push(cur); cur = w; }
+      });
+      out.push(cur);
+    });
+    return out;
+  }
+  function txtLR(izq, der, n){
+    izq = txtAscii(izq); der = txtAscii(der);
+    if(izq.length + 1 + der.length <= n) return izq + " ".repeat(n - izq.length - der.length) + der;
+    return izq + "\n" + txtPadL(der, n);
+  }
+
+  function reciboTexto(venta, logoRaster, direccionTexto){
+    var P = [];
+    var E = function(s){ P.push(ascii(txtAscii(s))); };
+    var B = function(bytes){ P.push(new Uint8Array(bytes)); };
+    var linea = function(ch){ E((ch || "-").repeat(TXT_COLS) + "\n"); };
+
+    B([0x1b, 0x40]);            // reiniciar
+    B([0x1c, 0x2e]);            // salir del modo chino (FS .)
+    B([0x1b, 0x74, 0x00]);      // tabla de caracteres 437
+    B([0x1b, 0x33, 0x1e]);      // interlineado 30 puntos (mas apretado y parejo)
+    B([0x1b, 0x61, 0x01]);      // centrado
+    if(logoRaster){
+      var r = logoRaster;
+      B([0x1d, 0x76, 0x30, 0x00, r.bpr & 255, (r.bpr >> 8) & 255, r.h & 255, (r.h >> 8) & 255]);
+      P.push(r.bits);
+      E("\n");
+    } else {
+      B([0x1b, 0x45, 0x01]); B([0x1d, 0x21, 0x11]); E((state.negocio.nombre || "Rico Pollo Dissur") + "\n"); B([0x1d, 0x21, 0x00]); B([0x1b, 0x45, 0x00]);
+    }
+    if(state.negocio.telefono) E("Tel. " + state.negocio.telefono + "\n");
+    if(state.negocio.direccion) txtWrap(state.negocio.direccion, TXT_COLS).forEach(function(l){ E(l + "\n"); });
+    E("NOTA DE VENTA\n");
+    B([0x1b, 0x45, 0x01]); B([0x1d, 0x21, 0x11]);
+    E("No. " + String(venta.correlativo).padStart(6, "0") + "\n");
+    B([0x1d, 0x21, 0x00]); B([0x1b, 0x45, 0x00]);
+    B([0x1b, 0x61, 0x00]);      // izquierda
+    linea("-");
+    E(txtLR("Fecha", fechaDisplay(venta.fecha), TXT_COLS) + "\n");
+    if(venta.creadoEn) E(txtLR("Hora", horaDisplay(venta.creadoEn), TXT_COLS) + "\n");
+    E(txtLR("Cliente", venta.cliente, TXT_COLS) + "\n");
+    if(venta.vendedor) E(txtLR("Vendedor", venta.vendedor, TXT_COLS) + "\n");
+    if(venta.ubicacion){
+      B([0x1b, 0x45, 0x01]); E("Ubicacion:\n"); B([0x1b, 0x45, 0x00]);
+      var dirTxt = direccionTexto || (venta.ubicacion.lat.toFixed(5) + ", " + venta.ubicacion.lon.toFixed(5));
+      txtWrap(dirTxt, TXT_COLS).forEach(function(l){ E(l + "\n"); });
+    }
+    E("\n");
+    B([0x1b, 0x45, 0x01]); E("MONEDA: " + MONEDA_NOMBRE + "\n");
+    // Tabla (48 columnas): COD 6 | DESC 13 | CAN 4 | KG 6 | P.UNIT 6 | IMPORTE 8, con un espacio entre columnas
+    E(txtPad("CODIGO", 6) + " " + txtPad("DESCRIPCION", 13) + " " + txtPadL("CAN.", 4) + " " + txtPadL("KG", 6) + " " + txtPadL("P.UNIT", 6) + " " + txtPadL("IMPORTE", 8) + "\n");
+    B([0x1b, 0x45, 0x00]);
+    linea("-");
+    venta.items.forEach(function(it){
+      var desc = txtWrap(it.producto, 13);
+      var l1 = txtPad(txtAscii(codigoItem(it) || "-"), 6) + " " + txtPad(desc[0] || "", 13) + " " + txtPadL(numTxt(it.cantidad), 4) + " "
+        + txtPadL(Number(it.kg) > 0 ? numTxt(it.kg) : "-", 6) + " " + txtPadL(Number(it.precio).toFixed(2), 6) + " " + txtPadL(subtotalItem(it, !venta.redondeo).toFixed(2), 8);
+      E(l1 + "\n");
+      desc.slice(1).forEach(function(d){ E("       " + d + "\n"); });
+    });
+    linea("=");
+    B([0x1b, 0x45, 0x01]); B([0x1d, 0x21, 0x11]);
+    E(txtLR("TOTAL", fmt(venta.total), TXT_COLS / 2) + "\n");
+    B([0x1d, 0x21, 0x00]); B([0x1b, 0x45, 0x00]);
+    linea("-");
+    pagoLineas(venta).forEach(function(r){ E(txtLR(r[0], r[1], TXT_COLS) + "\n"); });
+    if(venta.notas){ E("\n"); txtWrap(venta.notas, TXT_COLS).forEach(function(l){ E(l + "\n"); }); }
+    E("\n");
+    B([0x1b, 0x61, 0x01]);      // centrado
+    pieLineas().forEach(function(l){ txtWrap(l, TXT_COLS).forEach(function(x){ E(x + "\n"); }); });
+    var ped = pedidosLineas(false);
+    if(ped.length){ B([0x1b, 0x45, 0x01]); E(ped[0] + "\n"); E(ped[1] + "\n"); B([0x1b, 0x45, 0x00]); }
+    B([0x1b, 0x64, 0x03]);      // avanzar 3 lineas
+    B([0x1b, 0x61, 0x00]);
+    return unir(P);
+  }
+
+  // Logo como imagen chica (24 mm) para el modo texto.
+  function logoRasterParaTexto(img){
+    if(!img) return null;
+    var cd = new CanvasDoc(80, 25); cd.logoImg = img;
+    cd.addImage(null, "", 28, 0.5, 24, 24);
+    return canvasABits(cd);
+  }
+
   function imprimirDirecto(venta){
     if(!btDisponible()){ alert(btMensajeNoDisponible()); return; }
     btEstado("Preparando la nota…");
     var dirP = venta.ubicacion ? reverseGeocode(venta.ubicacion) : Promise.resolve(null);
     Promise.all([conLogoDataUrl().then(cargarImagen), dirP]).then(function(res){
+      if(btLang() === "ESCPOSTXT"){
+        var bytes = reciboTexto(venta, logoRasterParaTexto(res[0]), res[1]);
+        return btConectar().then(function(ch){ return etapa("enviar", btEnviar(ch, bytes)); }).then(function(){ btEstado("Enviado a la impresora ✓"); });
+      }
       var cd = notaACanvasDoc(venta, res[0], res[1]);
       return enviarAImpresora(cd);
     }).catch(function(e){
@@ -2750,6 +2858,15 @@
 
   function probarImpresora(){
     if(!btDisponible()){ alert(btMensajeNoDisponible()); return; }
+    if(btLang() === "ESCPOSTXT"){
+      var pr = unir([new Uint8Array([0x1b,0x40,0x1c,0x2e,0x1b,0x74,0x00,0x1b,0x61,0x01,0x1b,0x45,0x01]), ascii("PRUEBA DE IMPRESORA\n"), new Uint8Array([0x1b,0x45,0x00]),
+        ascii("Rico Pollo Dissur\nModo texto rapido | 80 mm\n"), new Uint8Array([0x1b,0x61,0x00]), ascii("-".repeat(TXT_COLS)+"\n"+txtLR("Izquierda","Derecha",TXT_COLS)+"\n"+"-".repeat(TXT_COLS)+"\n"),
+        new Uint8Array([0x1b,0x61,0x01]), ascii("Si lees esto, esta bien\n"), new Uint8Array([0x1b,0x64,0x03,0x1b,0x61,0x00])]);
+      btConectar().then(function(ch){ return etapa("enviar", btEnviar(ch, pr)); }).then(function(){ btEstado("Enviado a la impresora ✓"); }).catch(function(e){
+        btEstado(""); if(e && e.name === "NotFoundError") return; alert("No se pudo imprimir: "+btErrorTexto(e));
+      });
+      return;
+    }
     var cd = new CanvasDoc(80, 46);
     cd.setFont("courier", "bold").setFontSize(12); cd.text("PRUEBA DE IMPRESORA", 40, 10, { align:"center" });
     cd.setFont("courier", "normal").setFontSize(9); cd.text("Rico Pollo Dissur", 40, 17, { align:"center" });
@@ -2826,12 +2943,12 @@
       + '    <div class="actions-row" style="justify-content:space-between;align-items:center;"><span>Sesión de <strong>'+escapeHtml(currentUser?currentUser.nombre:"")+'</strong></span><button class="btn btn-danger" data-action="cerrar-sesion">Cerrar sesión</button></div>'
       + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
       + '    <h2 style="font-size:15px;">Impresora Bluetooth <span class="pay-tag efectivo" style="font-weight:400;">versión '+APP_VERSION+'</span></h2>'
-      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo ESC/POS compatible</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
+      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOSTXT"'+(btLang()==="ESCPOSTXT"?" selected":"")+'>Recibo texto (rápido, recomendado)</option><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo imagen (lento, exacto)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo ESC/POS compatible</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
       + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-grueso"'+(btGrueso()?" checked":"")+'> Letra más gruesa y oscura</label>'
       + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-rapido"'+(btRapido()?" checked":"")+'> Envío rápido (si sale texto raro a media nota, desmárcalo)</label>'
       + '    <div class="actions-row" style="justify-content:flex-start;margin-top:8px;"><button class="btn btn-sm" data-action="bt-probar">🖨 Hoja de prueba</button></div>'
       + '    <p class="section-sub" id="bt-status-ajustes" style="margin:8px 0 0;min-height:1em;"></p>'
-      + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si sale texto raro, prueba en este orden: Recibo ESC/POS → ESC/POS compatible → TSPL. En iPhone se usa el navegador Bluefy.</p>'
+      + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si sale texto raro, prueba en este orden: Recibo texto → Recibo imagen → ESC/POS compatible → TSPL. En iPhone se usa el navegador Bluefy.</p>'
       + (soyAdmin ? ''
         + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
         + '    <h2 style="font-size:15px;">Usuarios que pueden entrar</h2>'
