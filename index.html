@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "22 sep · v32";
+  var APP_VERSION = "22 sep · v33";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2370,8 +2370,9 @@
   function btLang(){
     var v = "";
     try{ v = localStorage.getItem(btLangKey()) || localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){}
-    return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2" || v==="ESCPOSTXT") ? v : "ESCPOS";
+    return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2" || v==="ESCPOS") ? v : "ESCPOSTXT";
   }
+  try{ if(localStorage.getItem("lr_printer_lang_migr_v1")!=="2"){ ["lr_printer_lang_v1"].forEach(function(k){ if(localStorage.getItem(k)==="ESCPOS") localStorage.removeItem(k); }); Object.keys(localStorage).forEach(function(k){ if(k.indexOf("lr_printer_lang_v1:")===0 && localStorage.getItem(k)==="ESCPOS") localStorage.removeItem(k); }); localStorage.setItem("lr_printer_lang_migr_v1","2"); } }catch(e){}
   function btNombreImpresora(){ var n = (btPrinter.device && btPrinter.device.name) || ""; try{ if(!n) n = localStorage.getItem("lr_printer_last_v1") || ""; }catch(e){} return n; }
 
   // Envio "seguro" (con confirmacion, trozos chicos) por defecto: a algunas impresoras el modo rapido las desborda.
@@ -2958,12 +2959,12 @@
       + '    <div class="actions-row" style="justify-content:space-between;align-items:center;"><span>Sesión de <strong>'+escapeHtml(currentUser?currentUser.nombre:"")+'</strong></span><button class="btn btn-danger" data-action="cerrar-sesion">Cerrar sesión</button></div>'
       + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
       + '    <h2 style="font-size:15px;">Impresora Bluetooth <span class="pay-tag efectivo" style="font-weight:400;">versión '+APP_VERSION+'</span></h2>'
-      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora'+(btNombreImpresora() ? ' <span class="pay-tag banco">'+escapeHtml(btNombreImpresora())+'</span>' : '')+'</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="ESCPOSTXT"'+(btLang()==="ESCPOSTXT"?" selected":"")+'>Recibo texto rápido (en prueba)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo por líneas (para ITC-810P)</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
+      + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora'+(btNombreImpresora() ? ' <span class="pay-tag banco">'+escapeHtml(btNombreImpresora())+'</span>' : '')+'</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOSTXT"'+(btLang()==="ESCPOSTXT"?" selected":"")+'>Recibo texto (rápido, recomendado)</option><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo imagen (lento)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo por líneas (para ITC-810P)</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
       + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-grueso"'+(btGrueso()?" checked":"")+'> Letra más gruesa y oscura</label>'
       + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-rapido"'+(btRapido()?" checked":"")+'> Envío rápido (si sale texto raro a media nota, desmárcalo)</label>'
       + '    <div class="actions-row" style="justify-content:flex-start;margin-top:8px;"><button class="btn btn-sm" data-action="bt-probar">🖨 Hoja de prueba</button></div>'
       + '    <p class="section-sub" id="bt-status-ajustes" style="margin:8px 0 0;min-height:1em;"></p>'
-      + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si sale texto raro, prueba en este orden: Recibo ESC/POS → ESC/POS compatible → TSPL. En iPhone se usa el navegador Bluefy.</p>'
+      + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si sale mal, prueba en este orden: Recibo texto → Recibo por líneas → Recibo imagen → TSPL. En iPhone se usa el navegador Bluefy.</p>'
       + (soyAdmin ? ''
         + '    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">'
         + '    <h2 style="font-size:15px;">Usuarios que pueden entrar</h2>'
