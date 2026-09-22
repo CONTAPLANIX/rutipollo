@@ -454,7 +454,7 @@
 
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
   var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: (new Date()).getMonth()+1, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
-    gateMode: "login", gateSelectedId: null, gateError: "", soloMisVentas: false,
+    gateMode: "login", gateSelectedId: null, gateError: "", soloMisVentas: false, vendedorFiltro: "",
     cobrarVista: "pendientes", cobrarBuscar: "", clientesBuscar: "", productosBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
 
   var LS = { ventas:"lr_ventas_v1", productos:"lr_productos_v1", clientes:"lr_clientes_v1", negocio:"lr_negocio_v1", pending:"lr_pending_deletes_v1", usuarios:"lr_usuarios_v1", currentUser:"lr_current_user_v1", lastBackup:"lr_last_backup_v1" };
@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "22 sep · v33";
+  var APP_VERSION = "22 sep · v34";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -594,10 +594,10 @@
   function poolResumenPorScope(scope){
     if(scope==="year") return groupByYear(ui.resumenYear);
     if(scope==="month") return groupByYear(ui.resumenYear).filter(function(v){ return v.mes===ui.resumenMonth; });
-    if(scope==="cobrar") return state.ventas.filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; });
+    if(scope==="cobrar") return state.ventas.filter(function(v){ return pasaFiltroVendedor(v); });
     var diaSel2 = ui.resumenDiaSel || todayISO();
     return state.ventas.filter(function(v){ return v.fecha===diaSel2; })
-      .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; });
+      .filter(function(v){ return pasaFiltroVendedor(v); });
   }
 
   function notaRowHtml(v){
@@ -823,7 +823,7 @@
       txt.textContent = pend>0 ? ("Sin internet · "+pend+" por enviar") : "Sin internet — guardado local";
     } else if(pend>0){
       dot.className = "sync-dot warn";
-      txt.textContent = "Sincronizando "+pend+"…";
+      txt.textContent = ultimoErrorSync ? ("⚠ "+pend+" sin subir: "+ultimoErrorSync) : ("Sincronizando "+pend+"…");
     } else {
       dot.className = "sync-dot ok";
       txt.textContent = "Sincronizado";
@@ -879,9 +879,20 @@
     persist("clientes");
   }
 
+  var ultimoErrorSync = "";
+  function anotarErrorSync(e){
+    var c = (e && (e.code || e.message)) || String(e || "");
+    ultimoErrorSync = c === "permission-denied" ? "sin permiso (¿sesión vencida? cierra sesión y vuelve a entrar)" : c;
+    refreshSyncBadge();
+  }
   function syncPending(){
     if(!state.dbReady || !navigator.onLine) { refreshSyncBadge(); return; }
     var db = state.db;
+    if(!(window.firebase && firebase.auth && firebase.auth().currentUser)){
+      if(pendingCount() > 0) ultimoErrorSync = "sin sesión: cierra sesión y vuelve a entrar para subir lo pendiente";
+      refreshSyncBadge(); return;
+    }
+    ultimoErrorSync = "";
 
     pendingDeletes.ventas.slice().forEach(function(id){
       db.doc("ventas/"+id).delete().then(function(){
@@ -912,7 +923,7 @@
       var body = Object.assign({}, v); delete body.id; delete body._synced;
       db.doc("ventas/"+v.id).set(body).then(function(){
         v._synced = true; persist("ventas"); refreshSyncBadge();
-      }).catch(function(){});
+      }).catch(anotarErrorSync);
     });
 
     state.productos.filter(function(p){ return !p._synced; }).forEach(function(p){
@@ -933,7 +944,7 @@
       var body = Object.assign({}, c); delete body.id; delete body._synced;
       db.doc("clientes/"+c.id).set(body).then(function(){
         c._synced = true; persist("clientes"); refreshSyncBadge();
-      }).catch(function(){});
+      }).catch(anotarErrorSync);
     });
 
     if(state.negocio._dirty){
@@ -1407,11 +1418,25 @@
 
   function groupByYear(year){
     return state.ventas.filter(function(v){ return v.anio===year; })
-      .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; });
+      .filter(function(v){ return pasaFiltroVendedor(v); });
   }
 
+  // Vendedor que se esta viendo: las administradoras eligen cualquiera; los vendedores solo "todas" o "mias".
+  function pasaFiltroVendedor(v){
+    if(esAdmin(currentUser) && ui.vendedorFiltro) return (v.vendedor||"") === ui.vendedorFiltro;
+    return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre;
+  }
   function soloMiosToggleHtml(){
     if(!currentUser) return "";
+    if(esAdmin(currentUser)){
+      var nombres = {};
+      state.usuarios.forEach(function(u){ if(u.nombre) nombres[u.nombre] = true; });
+      state.ventas.forEach(function(v){ if(v.vendedor) nombres[v.vendedor] = true; });
+      var lista = Object.keys(nombres).sort();
+      return '<label class="sel-wrap"><span>Vendedor</span><select class="year-select" id="vendedor-filtro"><option value="">Todos</option>'
+        + lista.map(function(n){ return '<option value="'+escapeHtml(n)+'"'+(ui.vendedorFiltro===n?' selected':'')+'>'+escapeHtml(n)+'</option>'; }).join("")
+        + '</select></label>';
+    }
     return '<button class="btn btn-sm" data-action="toggle-solo-mios">'+(ui.soloMisVentas ? "✓ Solo mis ventas" : "Solo mis ventas")+'</button>';
   }
 
@@ -1601,7 +1626,7 @@
     if(ui.resumenVista === "undia"){
       var diaSel = ui.resumenDiaSel || todayISO();
       var ventasDia = state.ventas.filter(function(v){ return v.fecha===diaSel; })
-        .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; })
+        .filter(function(v){ return pasaFiltroVendedor(v); })
         .sort(function(a,b){ return (a.creadoEn||0)-(b.creadoEn||0); });
       var totalDia = ventasDia.reduce(function(s,v){return s+v.total;},0);
       var efvoDia = cobradoTotal(ventasDia, "efectivo");
@@ -1754,7 +1779,7 @@
 
       var eventos = [];
       state.ventas.filter(function(v){ return v.tipoPago==="credito"; })
-        .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; })
+        .filter(function(v){ return pasaFiltroVendedor(v); })
         .forEach(function(v){
           abonosEfectivos(v).forEach(function(a){
             var fp = parseFecha(a.fecha);
@@ -1803,7 +1828,7 @@
     }
 
     var pendientes = state.ventas.filter(estaPendiente)
-      .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; });
+      .filter(function(v){ return pasaFiltroVendedor(v); });
     var totalPendiente = pendientes.reduce(function(s,v){return s+saldoPendiente(v);},0);
 
     if(!pendientes.length){
@@ -1995,7 +2020,7 @@
   }
 
   function exportarTodoCSV(){
-    var ventas = state.ventas.filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; });
+    var ventas = state.ventas.filter(function(v){ return pasaFiltroVendedor(v); });
     descargarCsvGenerico(ventas, "respaldo_completo_rutipollo"+(ui.soloMisVentas && currentUser ? "_"+currentUser.nombre : "")+".csv");
   }
 
@@ -3209,7 +3234,7 @@
       if(!rDesde || !rHasta){ alert("Selecciona las dos fechas."); return; }
       if(rDesde>rHasta){ alert("La fecha 'Desde' no puede ser mayor que 'Hasta'."); return; }
       var ventasRango = state.ventas.filter(function(v){ return v.fecha>=rDesde && v.fecha<=rHasta; })
-        .filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; })
+        .filter(function(v){ return pasaFiltroVendedor(v); })
         .sort(function(a,b){ return (a.creadoEn||0)-(b.creadoEn||0); });
       if(!ventasRango.length){ alert("No hay notas de venta en ese rango de fechas."); return; }
       closeOverlay();
@@ -3384,7 +3409,7 @@
     else if(t.id==="cobrar-buscar"){
       ui.cobrarBuscar = t.value;
       var cont = document.getElementById("cobrar-lista");
-      if(cont) cont.innerHTML = cobrarListaHtml(state.ventas.filter(estaPendiente).filter(function(v){ return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre; }));
+      if(cont) cont.innerHTML = cobrarListaHtml(state.ventas.filter(estaPendiente).filter(function(v){ return pasaFiltroVendedor(v); }));
     }
   });
 
@@ -3425,6 +3450,7 @@
     else if(t.id==="bt-rapido"){ try{ localStorage.setItem("lr_printer_fast_v1", t.checked ? "si" : "no"); }catch(e){} }
     else if(t.id==="bt-grueso"){ try{ localStorage.setItem("lr_printer_bold_v1", t.checked ? "si" : "no"); }catch(e){} }
     else if(t.id==="bt-lang"){ try{ localStorage.setItem(btLangKey(), t.value); localStorage.setItem(BT_KEY_LANG, t.value); }catch(e){} }
+    else if(t.id==="vendedor-filtro"){ ui.vendedorFiltro = t.value || ""; renderTab(); }
     else if(t.id==="resumen-year"){ ui.resumenYear = Number(t.value); renderTab(); }
     else if(t.id==="resumen-month"){
       ui.resumenMonth = Number(t.value);
