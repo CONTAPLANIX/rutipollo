@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "22 sep · v26";
+  var APP_VERSION = "22 sep · v27";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -2368,6 +2368,8 @@
   var BT_KEY_LANG = "lr_printer_lang_v1";
   function btLang(){ var v = ""; try{ v = localStorage.getItem(BT_KEY_LANG) || ""; }catch(e){} return (v==="TSPL" || v==="CPCL" || v==="ESCPOS2") ? v : "ESCPOS"; }
 
+  // Envio "seguro" (con confirmacion, trozos chicos) por defecto: a algunas impresoras el modo rapido las desborda.
+  function btRapido(){ var v = ""; try{ v = localStorage.getItem("lr_printer_fast_v1") || ""; }catch(e){} return v === "si"; }
   function btGrueso(){ var v = ""; try{ v = localStorage.getItem("lr_printer_bold_v1") || ""; }catch(e){} return v !== "no"; }
 
   // Computadora = no hay menu de compartir del sistema (el de celular).
@@ -2485,8 +2487,10 @@
 
   function btEnviar(ch, bytes){
     var total = bytes.length, i = 0;
-    var rapido = !!ch.properties.writeWithoutResponse && !!ch.writeValueWithoutResponse;
-    var chunk = rapido ? 180 : 120;
+    var rapido = btRapido() && !!ch.properties.writeWithoutResponse && !!ch.writeValueWithoutResponse;
+    var conResp = !!(ch.properties.write && (ch.writeValueWithResponse || ch.writeValue));
+    if(!conResp) rapido = true; // si la impresora solo acepta sin confirmacion, no hay otra opcion
+    var chunk = rapido ? 180 : 100;
     var errores = 0;
     function esperar(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
     function paso(){
@@ -2496,7 +2500,7 @@
       return w.then(function(){
         i += parte.length;
         if((i / chunk) % 8 < 1) btEstado("Enviando… " + Math.round(i * 100 / total) + "%");
-        return esperar(rapido ? 6 : 2);
+        return esperar(rapido ? 6 : 4);
       }, function(e){
         errores++;
         if(errores > 40) throw e;
@@ -2822,6 +2826,7 @@
       + '    <h2 style="font-size:15px;">Impresora Bluetooth <span class="pay-tag efectivo" style="font-weight:400;">versión '+APP_VERSION+'</span></h2>'
       + '    <div class="field"><label for="bt-lang">Lenguaje de la impresora</label><select id="bt-lang" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper-raised);color:var(--ink);font-size:14px;"><option value="ESCPOS"'+(btLang()==="ESCPOS"?" selected":"")+'>Recibo ESC/POS (recomendado)</option><option value="ESCPOS2"'+(btLang()==="ESCPOS2"?" selected":"")+'>Recibo ESC/POS compatible</option><option value="CPCL"'+(btLang()==="CPCL"?" selected":"")+'>CPCL</option><option value="TSPL"'+(btLang()==="TSPL"?" selected":"")+'>TSPL (modo etiqueta)</option></select></div>'
       + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-grueso"'+(btGrueso()?" checked":"")+'> Letra más gruesa y oscura</label>'
+      + '    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0 8px;"><input type="checkbox" id="bt-rapido"'+(btRapido()?" checked":"")+'> Envío rápido (si sale texto raro a media nota, desmárcalo)</label>'
       + '    <div class="actions-row" style="justify-content:flex-start;margin-top:8px;"><button class="btn btn-sm" data-action="bt-probar">🖨 Hoja de prueba</button></div>'
       + '    <p class="section-sub" id="bt-status-ajustes" style="margin:8px 0 0;min-height:1em;"></p>'
       + '    <p class="section-sub" style="margin-top:6px;">Toca "Hoja de prueba" y elige tu impresora en la lista. Si sale texto raro, prueba en este orden: Recibo ESC/POS → ESC/POS compatible → TSPL. En iPhone se usa el navegador Bluefy.</p>'
@@ -3282,6 +3287,7 @@
         btn.disabled = n===0;
       }
     }
+    else if(t.id==="bt-rapido"){ try{ localStorage.setItem("lr_printer_fast_v1", t.checked ? "si" : "no"); }catch(e){} }
     else if(t.id==="bt-grueso"){ try{ localStorage.setItem("lr_printer_bold_v1", t.checked ? "si" : "no"); }catch(e){} }
     else if(t.id==="bt-lang"){ try{ localStorage.setItem(BT_KEY_LANG, t.value); }catch(e){} }
     else if(t.id==="resumen-year"){ ui.resumenYear = Number(t.value); renderTab(); }
