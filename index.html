@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "23 sep · v38";
+  var APP_VERSION = "23 sep · v39";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1012,6 +1012,7 @@
               return;
             }
             var yo = Object.assign({}, snap.data(), { id:snap.id, _synced:true });
+            iniciarVentas(esAdmin(yo), yo.nombre);
             if(esAdmin(yo)){
               if(!listaAdminConectada){
                 listaAdminConectada = true;
@@ -1024,11 +1025,25 @@
             }
           }, function(){});
 
-          db.collection("ventas").orderBy("creadoEn","desc").limit(1000).onSnapshot(function(snap){
-            mergeRemoteVentas(snap.docChanges());
-            if(state.tab==="historial" || state.tab==="resumen") renderTab();
-            refreshSyncBadge();
-          }, function(){ refreshSyncBadge(); });
+          // Ventas: las administradoras reciben todas; un vendedor solo las suyas (el servidor tambien lo exige).
+          var ventasConectadas = false;
+          function iniciarVentas(esAdm, nombre){
+            if(ventasConectadas) return;
+            ventasConectadas = true;
+            var consulta = esAdm
+              ? db.collection("ventas").orderBy("creadoEn","desc").limit(1000)
+              : db.collection("ventas").where("vendedor","==",nombre||"");
+            if(!esAdm){
+              // Confidencial: en el celular de un vendedor no quedan notas de otros.
+              state.ventas = state.ventas.filter(function(v){ return (v.vendedor||"") === (nombre||""); });
+              persist("ventas");
+            }
+            consulta.onSnapshot(function(snap){
+              mergeRemoteVentas(snap.docChanges());
+              if(state.tab==="historial" || state.tab==="resumen" || state.tab==="cobrar") renderTab();
+              refreshSyncBadge();
+            }, function(){ refreshSyncBadge(); });
+          }
 
           db.collection("productos").orderBy("nombre","asc").limit(500).onSnapshot(function(snap){
             mergeRemoteProductos(snap.docChanges());
@@ -1353,7 +1368,13 @@
 
   // ---------- rendering ----------
 
+  function aplicarPestanasPorRol(){
+    var b = document.querySelector('.tab-btn[data-tab="resumen"]');
+    if(b) b.style.display = (currentUser && !esAdmin(currentUser)) ? "none" : "";
+    if(currentUser && !esAdmin(currentUser) && state.tab==="resumen") state.tab = "nueva";
+  }
   function renderTab(){
+    aplicarPestanasPorRol();
     var main = document.getElementById("main");
     if(state.tab==="nueva") main.innerHTML = viewNueva();
     else if(state.tab==="historial") main.innerHTML = viewHistorial();
@@ -1442,8 +1463,10 @@
 
   // Vendedor que se esta viendo: las administradoras eligen cualquiera; los vendedores solo "todas" o "mias".
   function pasaFiltroVendedor(v){
-    if(esAdmin(currentUser) && ui.vendedorFiltro) return (v.vendedor||"") === ui.vendedorFiltro;
-    return !ui.soloMisVentas || !currentUser || v.vendedor===currentUser.nombre;
+    if(!currentUser) return true;
+    if(!esAdmin(currentUser)) return (v.vendedor||"") === currentUser.nombre; // confidencial: solo lo suyo
+    if(ui.vendedorFiltro) return (v.vendedor||"") === ui.vendedorFiltro;
+    return !ui.soloMisVentas || v.vendedor===currentUser.nombre;
   }
   function soloMiosToggleHtml(){
     if(!currentUser) return "";
@@ -1456,7 +1479,7 @@
         + lista.map(function(n){ return '<option value="'+escapeHtml(n)+'"'+(ui.vendedorFiltro===n?' selected':'')+'>'+escapeHtml(n)+'</option>'; }).join("")
         + '</select></label>';
     }
-    return '<button class="btn btn-sm" data-action="toggle-solo-mios">'+(ui.soloMisVentas ? "✓ Solo mis ventas" : "Solo mis ventas")+'</button>';
+    return '<span class="section-sub" style="margin:0;">Solo tus ventas</span>';
   }
 
   function viewHistorial(){
