@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "23 sep · v36";
+  var APP_VERSION = "23 sep · v37";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1401,9 +1401,10 @@
       + '    <button type="button" class="pay-opt'+(draft.tipoPago==="credito"?" on":"")+'" data-action="tipo-pago" data-val="credito">Pendiente de pago</button>'
       + '  </div></div>'
       + (draft.tipoPago==="credito"
-          ? '<p class="section-sub" style="margin:-6px 0 0;">Quedará como pendiente de cobro hasta que la marques pagada en "Por cobrar".</p>'
-            + (editing ? '' : ''
-              + '  <div class="field" style="margin-top:14px;max-width:220px;"><label for="f-abono-inicial">¿Le pagaron algo al momento? (opcional)</label><input id="f-abono-inicial" type="number" min="0" step="0.01" placeholder="0.00"></div>'
+          ? '<p class="section-sub" style="margin:-6px 0 0;">Quedará como pendiente de cobro hasta que la cobres en "Deudores".</p>'
+            + (editing && editing.tipoPago==="credito" && montoAbonado(editing)>0.009 ? '<p class="section-sub" style="margin:6px 0 0;">Ya abonó '+fmt(montoAbonado(editing))+' de '+fmt(editing.total)+'. Saldo: <strong>'+fmt(saldoPendiente(editing))+'</strong>.</p>' : '')
+            + (''
+              + '  <div class="field" style="margin-top:14px;max-width:220px;"><label for="f-abono-inicial">'+(editing ? '¿Paga algo ahora? (se registra como abono)' : '¿Le pagaron algo al momento? (opcional)')+'</label><input id="f-abono-inicial" type="number" min="0" step="0.01" placeholder="0.00"></div>'
               + '  <div class="field"><label>Método del abono (si escribiste un monto)</label><div class="pay-toggle" id="abono-inicial-metodo" data-selected="efectivo">'
               + '    <button type="button" class="pay-opt on" data-action="abono-inicial-metodo" data-val="efectivo">Efectivo</button>'
               + '    <button type="button" class="pay-opt" data-action="abono-inicial-metodo" data-val="banco">Banco</button>'
@@ -3157,10 +3158,20 @@
       if(editingVentaId){
         var original = state.ventas.find(function(v){ return v.id===editingVentaId; });
         var ventaEditada = Object.assign({}, original, { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, redondeo:true, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago });
+        var abonoEdEl = document.getElementById("f-abono-inicial");
+        var abonoEdMonto = (tipoPago==="credito" && abonoEdEl) ? Math.min(Number(abonoEdEl.value)||0, total) : 0;
+        var abonoEdWrap = document.getElementById("abono-inicial-metodo");
+        var abonoEdMetodo = abonoEdWrap ? abonoEdWrap.getAttribute("data-selected")||"efectivo" : "efectivo";
         editingVentaId = null;
         draft = { fecha: todayISO(), cliente:"", notas:"", tipoPago:"contado", metodoPago:"efectivo", items:[blankItem()] };
         renderTab();
+        if(tipoPago==="contado"){ delete ventaEditada.abonos; }
         updateVenta(ventaEditada);
+        if(abonoEdMonto > 0.009){
+          var vEnEstado = state.ventas.find(function(x){ return x.id===ventaEditada.id; }) || ventaEditada;
+          registrarAbono(vEnEstado, abonoEdMonto, abonoEdMetodo);
+          openTicket(vEnEstado);
+        }
       } else {
         var maxCorr = state.ventas.reduce(function(m,v){return Math.max(m, v.correlativo||0);},0);
         var venta = { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, redondeo:true, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago, vendedor: currentUser?currentUser.nombre:"", correlativo:maxCorr+1, creadoEn:Date.now() };
