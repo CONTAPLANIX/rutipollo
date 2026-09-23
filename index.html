@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "23 sep · v37";
+  var APP_VERSION = "23 sep · v38";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -490,6 +490,14 @@
     var p = pedidosTexto(); if(!p) return [];
     var nums = p.split(/[|,;]/).map(function(x){ return x.trim(); }).filter(Boolean);
     return ["Pedidos al:", nums.map(function(n){ return (conEmoji ? "📲 " : "") + n; }).join("  |  ")];
+  }
+  // Numero de nota: serie por vendedor (E-000093, D-000093, C-000098). Las antiguas sin serie se muestran como antes.
+  function numNota(v){ return (v && v.serie ? v.serie + "-" : "") + String((v && v.correlativo) || 0).padStart(6, "0"); }
+  function serieDe(nombre){ var n = String(nombre||"").trim().toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g,""); return n ? n.charAt(0) : "X"; }
+  function siguienteCorrelativo(vendedor){
+    var max = 0;
+    state.ventas.forEach(function(v){ if((v.vendedor||"") === (vendedor||"")) max = Math.max(max, Number(v.correlativo)||0); });
+    return max + 1;
   }
   function numTxt(n){ return String(Number((Number(n)||0).toFixed(3))); }
 
@@ -554,7 +562,7 @@
     var rows = ventas.length ? ventas.map(function(v){
       if(!metodo) return notaRowHtml(v);
       var parcial = v.tipoPago==="credito" && cobradoVenta(v, metodo) < v.total - 0.009;
-      return '<div class="note-row"><div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+(parcial ? ' <span style="color:var(--ink-soft);font-size:11.5px;">(abono de '+fmt(v.total)+')</span>' : '')+'</div>'
+      return '<div class="note-row"><div class="who"><span class="corr">N° '+numNota(v)+'</span> — '+escapeHtml(v.cliente)+(parcial ? ' <span style="color:var(--ink-soft);font-size:11.5px;">(abono de '+fmt(v.total)+')</span>' : '')+'</div>'
         + '<div style="display:flex;align-items:center;gap:8px;"><span class="pay-tag '+metodoTagClass(metodo)+'">'+metodoAbrev(metodo)+'</span><span class="amt">'+fmt(cobradoVenta(v, metodo))+'</span>'
         + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div></div>';
     }).join("") : '<p class="empty">Sin notas en este periodo.</p>';
@@ -574,7 +582,7 @@
     function filaPendiente(v, esParcial){
       var monto = esParcial ? saldoPendiente(v) : v.total;
       var sub = esParcial ? ' <span style="color:var(--ink-soft);font-size:11.5px;">(de '+fmt(v.total)+')</span>' : '';
-      return '<div class="note-row"><div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+'</div>'
+      return '<div class="note-row"><div class="who"><span class="corr">N° '+numNota(v)+'</span> — '+escapeHtml(v.cliente)+'</div>'
         + '<div style="display:flex;align-items:center;gap:8px;"><span class="amt" style="color:var(--danger);">'+fmt(monto)+'</span>'+sub+'<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div></div>';
     }
     var html = '<h3 style="font-size:12.5px;margin:14px 0 6px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;">Deben el total de la nota ('+completos.length+')</h3>'
@@ -602,7 +610,7 @@
 
   function notaRowHtml(v){
     return '<div class="note-row">'
-      + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+'</div>'
+      + '<div class="who"><span class="corr">N° '+numNota(v)+'</span> — '+escapeHtml(v.cliente)+'</div>'
       + '<div style="display:flex;align-items:center;gap:10px;">'+payTagHtml(v)+'<span class="amt">'+fmt(v.total)+'</span>'
       + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
       + '</div>';
@@ -1385,7 +1393,7 @@
     var rows = draft.items.map(itemRowHtml).join("");
     return ''
       + (editing
-          ? '<h1 class="section-title">Editando nota N° '+String(editing.correlativo).padStart(6,"0")+'</h1><p class="section-sub">Corrige los datos y guarda los cambios.</p>'
+          ? '<h1 class="section-title">Editando nota N° '+numNota(editing)+'</h1><p class="section-sub">Corrige los datos y guarda los cambios.</p>'
           : '<h1 class="section-title">Nueva nota de venta</h1><p class="section-sub">Registra la venta al mayor de este punto de la ruta. Sin IGV — es un apunte interno.</p>')
       + hoyStrip
       + '<div class="card">'
@@ -1487,7 +1495,7 @@
             var check = ui.selectMode ? '<input type="checkbox" class="sel-check" data-id="'+v.id+'"'+(ui.selected[v.id]?" checked":"")+'>' : '';
             return '<div class="note-row">'
               + check
-              + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span>'+(!v._synced?' <span class="pending-mark" title="Pendiente de sincronizar">⏳</span>':'')+' — '+escapeHtml(v.cliente)+'</div>'
+              + '<div class="who"><span class="corr">N° '+numNota(v)+'</span>'+(!v._synced?' <span class="pending-mark" title="Pendiente de sincronizar">⏳</span>':'')+' — '+escapeHtml(v.cliente)+'</div>'
               + '<div style="display:flex;align-items:center;gap:10px;">'+payTag+'<span class="amt">'+fmt(v.total)+'</span>'
               + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
               + '</div>';
@@ -1648,7 +1656,7 @@
       var filaDia = ventasDia.map(function(v){
         var payTag = payTagHtml(v);
         return '<div class="note-row">'
-          + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+'</div>'
+          + '<div class="who"><span class="corr">N° '+numNota(v)+'</span> — '+escapeHtml(v.cliente)+'</div>'
           + '<div style="display:flex;align-items:center;gap:10px;">'+payTag+'<span class="amt">'+fmt(v.total)+'</span>'
           + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
           + '</div>';
@@ -1773,7 +1781,7 @@
     if(!pend.length) return "";
     var total = pend.reduce(function(s,v){ return s + saldoPendiente(v); }, 0);
     var filas = pend.map(function(v){
-      return '<div class="meta" style="font-size:13px;"><span><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> · '+fechaDisplay(v.fecha)+(esPagoParcial(v)?' <span style="color:#b8790a;">(abonó '+fmt(montoAbonado(v))+')</span>':'')+'</span><span class="mono" style="color:var(--danger);font-weight:600;">'+fmt(saldoPendiente(v))+'</span></div>';
+      return '<div class="meta" style="font-size:13px;"><span><span class="corr">N° '+numNota(v)+'</span> · '+fechaDisplay(v.fecha)+(esPagoParcial(v)?' <span style="color:#b8790a;">(abonó '+fmt(montoAbonado(v))+')</span>':'')+'</span><span class="mono" style="color:var(--danger);font-weight:600;">'+fmt(saldoPendiente(v))+'</span></div>';
     }).join("");
     return '<div class="card" style="border:1px solid var(--danger);background:var(--paper-alt);padding:12px 14px;margin-top:-6px;margin-bottom:14px;">'
       + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;"><strong style="color:var(--danger);">⚠ Este cliente debe</strong><span class="mono" style="font-size:18px;font-weight:700;color:var(--danger);">'+fmt(total)+'</span></div>'
@@ -1850,7 +1858,7 @@
           var v = ev.venta;
           var esParcial = ev.monto < v.total - 0.009;
           return '<div class="note-row">'
-            + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+escapeHtml(v.cliente)+' <span style="color:var(--ink-soft);">(vendido '+fechaDisplay(v.fecha)+(esParcial?', abono parcial':'')+')</span></div>'
+            + '<div class="who"><span class="corr">N° '+numNota(v)+'</span> — '+escapeHtml(v.cliente)+' <span style="color:var(--ink-soft);">(vendido '+fechaDisplay(v.fecha)+(esParcial?', abono parcial':'')+')</span></div>'
             + '<div style="display:flex;align-items:center;gap:8px;"><span class="pay-tag '+metodoTagClass(ev.metodo)+'">'+metodoLabel(ev.metodo)+'</span><span class="amt">'+fmt(ev.monto)+'</span>'
             + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
             + '</div>';
@@ -1918,7 +1926,7 @@
         var filas = notasMes.map(function(v){
           var parcial = esPagoParcial(v) ? '<div style="font-size:11.5px;color:#b8790a;width:100%;">Abonado '+fmt(montoAbonado(v))+' de '+fmt(v.total)+'</div>' : '';
           return '<div class="note-row" style="flex-wrap:wrap;align-items:center;">'
-            + '<div class="who"><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> — '+fechaDisplay(v.fecha)+'</div>'
+            + '<div class="who"><span class="corr">N° '+numNota(v)+'</span> — '+fechaDisplay(v.fecha)+'</div>'
             + '<div style="display:flex;align-items:center;gap:10px;"><span class="amt" style="color:var(--danger);">Debe '+fmt(saldoPendiente(v))+'</span><button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
             + parcial
             + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%;justify-content:flex-end;">'+filaAbono(v)+'</div></div>';
@@ -2021,7 +2029,7 @@
       var estado = estaPendiente(v) ? (esPagoParcial(v)?"Abono parcial":"Pendiente") : "Pagado";
       (v.items||[]).forEach(function(it){
         rows.push([
-          v.correlativo, v.fecha, v.cliente, codigoItem(it), it.producto, it.cantidad, it.kg||"", it.precio,
+          numNota(v), v.fecha, v.cliente, codigoItem(it), it.producto, it.cantidad, it.kg||"", it.precio,
           subtotalItem(it, !v.redondeo).toFixed(2), Number(v.total).toFixed(2),
           v.tipoPago==="credito"?"Pendiente de pago":"Contado", estado, saldoPendiente(v).toFixed(2),
           v.metodoPago ? metodoLabel(v.metodoPago) : "", v.vendedor||"",
@@ -2132,7 +2140,7 @@
     if(state.negocio.direccion){ center(state.negocio.direccion, 8.5, false); y+=4.6; }
     y += 1.4;
     center("NOTA DE VENTA", 10, false); y+=6.2;
-    center("N° "+String(venta.correlativo).padStart(6,"0"), 15, true); y+=4;
+    center("N° "+numNota(venta), 15, true); y+=4;
     doc.setLineWidth(0.1); doc.line(x, y, x+w, y); y += 5;
 
     row("Fecha", fechaDisplay(venta.fecha));
@@ -2259,12 +2267,12 @@
   }
 
   function compartirPdfTicket(venta){
-    var nombre = "nota_"+String(venta.correlativo).padStart(6,"0")+".pdf";
+    var nombre = "nota_"+numNota(venta)+".pdf";
     function enviar(blob){
       if(!blob){ alert("No se pudo preparar el PDF. Intenta de nuevo en unos segundos."); return; }
       var file = new File([blob], nombre, { type:"application/pdf" });
       if(navigator.canShare && navigator.canShare({ files:[file] })){
-        navigator.share({ files:[file], title:"Nota de venta N° "+String(venta.correlativo).padStart(6,"0") }).catch(function(err){
+        navigator.share({ files:[file], title:"Nota de venta N° "+numNota(venta) }).catch(function(err){
           if(err && err.name!=="AbortError") triggerDownload(nombre, blob);
         });
       } else {
@@ -2281,7 +2289,7 @@
       var logoDataUrl = res[0], direccionTexto = res[1];
       var blob = buildTicketPdfBlob(venta, logoDataUrl, direccionTexto);
       if(!blob){ alert("No se pudo preparar el PDF. Intenta de nuevo en unos segundos."); return; }
-      triggerDownload("nota_"+String(venta.correlativo).padStart(6,"0")+".pdf", blob);
+      triggerDownload("nota_"+numNota(venta)+".pdf", blob);
     });
   }
 
@@ -2340,7 +2348,7 @@
       + (state.negocio.telefono ? '<div class="biz-sub">Tel. '+escapeHtml(state.negocio.telefono)+'</div>' : '')
       + (state.negocio.direccion ? '<div class="biz-sub">'+escapeHtml(state.negocio.direccion)+'</div>' : '')
       + '      <div class="doc-title">Nota de venta</div>'
-      + '      <div class="corr-stamp">N° '+String(venta.correlativo).padStart(6,"0")+'</div>'
+      + '      <div class="corr-stamp">N° '+numNota(venta)+'</div>'
       + '      <div class="meta"><span>Fecha</span><span>'+fechaDisplay(venta.fecha)+'</span></div>'
       + (venta.creadoEn ? '      <div class="meta"><span>Hora</span><span>'+horaDisplay(venta.creadoEn)+'</span></div>' : '')
       + '      <div class="meta"><span>Cliente</span><span>'+escapeHtml(venta.cliente)+'</span></div>'
@@ -2853,7 +2861,7 @@
     if(state.negocio.direccion) txtWrap(state.negocio.direccion, TXT_COLS).forEach(function(l){ E(l + "\n"); });
     E("NOTA DE VENTA\n");
     B([0x1b, 0x45, 0x01]); B([0x1d, 0x21, 0x11]);
-    E("No. " + String(venta.correlativo).padStart(6, "0") + "\n");
+    E("No. " + numNota(venta) + "\n");
     B([0x1d, 0x21, 0x00]); B([0x1b, 0x45, 0x00]);
     B([0x1b, 0x61, 0x00]);      // izquierda
     linea("-");
@@ -2924,7 +2932,7 @@
 
   // Nota como foto (PNG) para mandar por WhatsApp: se comparte si el celular lo permite; si no, se descarga.
   function compartirImagenTicket(venta){
-    var nombre = "nota_"+String(venta.correlativo).padStart(6,"0")+".png";
+    var nombre = "nota_"+numNota(venta)+".png";
     btEstado("Preparando la imagen…");
     var dirP = venta.ubicacion ? reverseGeocode(venta.ubicacion) : Promise.resolve(null);
     Promise.all([conLogoDataUrl().then(cargarImagen), dirP]).then(function(res){
@@ -2935,7 +2943,7 @@
       if(!blob){ alert("No se pudo crear la imagen."); return; }
       var file = new File([blob], nombre, { type:"image/png" });
       if(navigator.canShare && navigator.canShare({ files:[file] })){
-        navigator.share({ files:[file], title:"Nota de venta N° "+String(venta.correlativo).padStart(6,"0") }).catch(function(err){
+        navigator.share({ files:[file], title:"Nota de venta N° "+numNota(venta) }).catch(function(err){
           if(err && err.name!=="AbortError") triggerDownload(nombre, blob);
         });
       } else {
@@ -3173,8 +3181,8 @@
           openTicket(vEnEstado);
         }
       } else {
-        var maxCorr = state.ventas.reduce(function(m,v){return Math.max(m, v.correlativo||0);},0);
-        var venta = { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, redondeo:true, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago, vendedor: currentUser?currentUser.nombre:"", correlativo:maxCorr+1, creadoEn:Date.now() };
+        var vendNombre = currentUser ? currentUser.nombre : "";
+        var venta = { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, redondeo:true, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago, vendedor: vendNombre, serie: serieDe(vendNombre), correlativo: siguienteCorrelativo(vendNombre), creadoEn:Date.now() };
         if(tipoPago==="credito"){
           var abonoInicialEl = document.getElementById("f-abono-inicial");
           var abonoInicialMonto = abonoInicialEl ? Math.min(Number(abonoInicialEl.value)||0, total) : 0;
@@ -3281,7 +3289,7 @@
       var saldoAntes = saldoPendiente(vv);
       var esCompleto = monto >= saldoAntes - 0.009;
       var pregunta = esCompleto
-        ? "¿Marcar la nota N° "+String(vv.correlativo).padStart(6,"0")+" ("+fmt(saldoAntes)+") como pagada por "+metodoLabel(metodo)+"?"
+        ? "¿Marcar la nota N° "+numNota(vv)+" ("+fmt(saldoAntes)+") como pagada por "+metodoLabel(metodo)+"?"
         : "¿Registrar un abono de "+fmt(monto)+" (de "+fmt(saldoAntes)+" pendiente) por "+metodoLabel(metodo)+"?";
       if(confirm(pregunta)){
         registrarAbono(vv, monto, metodo);
