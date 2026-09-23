@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "22 sep · v35";
+  var APP_VERSION = "23 sep · v36";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1392,6 +1392,7 @@
       + '  <div class="row2">'
       + '    <div class="field"><label for="f-fecha">Fecha</label><input id="f-fecha" type="date" value="'+draft.fecha+'"></div>'
       + '    <div class="field ac-wrap"><label for="f-cliente">Cliente / puesto</label><input id="f-cliente" autocomplete="off" type="text" placeholder="Ej: Bodega San José" value="'+escapeHtml(draft.cliente)+'"><div class="ac-list" id="ac-cliente" hidden></div></div>'
+      + '    <div id="deuda-cliente">'+deudaClienteHtml(draft.cliente)+'</div>'
       + '  </div>'
       + '  <div class="items-wrap"><table class="items-form"><thead><tr><th>Producto</th><th>Cant.</th><th>Kg</th><th>P. Unit.</th><th>Importe</th><th></th></tr></thead><tbody id="items-body">'+rows+'</tbody></table></div>'
       + '  <div style="margin-top:10px;"><button class="btn btn-sm" data-action="agregar-item">+ Agregar producto</button></div>'
@@ -1757,6 +1758,42 @@
         + '</div>'
         + '<div class="card chart-card">'+svgDia+'</div>'
         + bodyDias);
+  }
+
+  // En Nueva venta: si el cliente escrito debe, se muestra su deuda (notas pendientes, total) y una casilla para abonar.
+  function pendientesDeCliente(nombre){
+    var n = String(nombre||"").trim().toLowerCase();
+    if(!n) return [];
+    return state.ventas.filter(function(v){ return estaPendiente(v) && String(v.cliente||"").trim().toLowerCase()===n; })
+      .sort(function(a,b){ return (a.fecha<b.fecha?-1:a.fecha>b.fecha?1:0) || (a.creadoEn||0)-(b.creadoEn||0); });
+  }
+  function deudaClienteHtml(nombre){
+    var pend = pendientesDeCliente(nombre);
+    if(!pend.length) return "";
+    var total = pend.reduce(function(s,v){ return s + saldoPendiente(v); }, 0);
+    var filas = pend.map(function(v){
+      return '<div class="meta" style="font-size:13px;"><span><span class="corr">N° '+String(v.correlativo).padStart(6,"0")+'</span> · '+fechaDisplay(v.fecha)+(esPagoParcial(v)?' <span style="color:#b8790a;">(abonó '+fmt(montoAbonado(v))+')</span>':'')+'</span><span class="mono" style="color:var(--danger);font-weight:600;">'+fmt(saldoPendiente(v))+'</span></div>';
+    }).join("");
+    return '<div class="card" style="border:1px solid var(--danger);background:var(--paper-alt);padding:12px 14px;margin-top:-6px;margin-bottom:14px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;"><strong style="color:var(--danger);">⚠ Este cliente debe</strong><span class="mono" style="font-size:18px;font-weight:700;color:var(--danger);">'+fmt(total)+'</span></div>'
+      + '<div style="margin:8px 0 10px;">'+filas+'</div>'
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+      + '  <span style="font-size:12.5px;font-weight:600;">Abona ahora:</span>'
+      + '  <input type="number" id="deuda-abono-monto" min="0" max="'+total.toFixed(2)+'" step="0.01" placeholder="S/ monto" style="width:110px;">'
+      + '  <div class="pay-toggle" id="deuda-abono-metodo" data-selected="efectivo" style="margin:0;">'
+      + '    <button type="button" class="pay-opt on" data-action="deuda-abono-metodo" data-val="efectivo">Efectivo</button>'
+      + '    <button type="button" class="pay-opt" data-action="deuda-abono-metodo" data-val="banco">Banco</button>'
+      + '    <button type="button" class="pay-opt yape" data-action="deuda-abono-metodo" data-val="yape">Yape</button>'
+      + '    <button type="button" class="pay-opt plin" data-action="deuda-abono-metodo" data-val="plin">Plin</button>'
+      + '  </div>'
+      + '  <button type="button" class="btn btn-sm btn-primary" data-action="deuda-abono-registrar">Registrar abono</button>'
+      + '</div>'
+      + '<p class="section-sub" style="margin:8px 0 0;">El abono se aplica a las notas más antiguas primero. Se registra aparte de la venta nueva.</p>'
+      + '</div>';
+  }
+  function refrescarDeudaCliente(){
+    var box = document.getElementById("deuda-cliente");
+    if(box) box.innerHTML = deudaClienteHtml(draft.cliente);
   }
 
   function filaAbono(v){
@@ -3049,6 +3086,7 @@
       var fc = document.getElementById("f-cliente");
       if(fc) fc.value = draft.cliente;
       hideAllSuggestions();
+      refrescarDeudaCliente();
     }
     else if(action==="elegir-producto"){
       var pidx = Number(t.getAttribute("data-idx"));
@@ -3062,6 +3100,19 @@
       renderTab();
     }
     else if(action==="pago"){ draft.metodoPago = t.getAttribute("data-val"); renderTab(); }
+    else if(action==="deuda-abono-metodo"){
+      var wrapD = document.getElementById("deuda-abono-metodo");
+      if(wrapD){ wrapD.setAttribute("data-selected", t.getAttribute("data-val")); Array.prototype.forEach.call(wrapD.querySelectorAll(".pay-opt"), function(b){ b.classList.remove("on"); }); t.classList.add("on"); }
+    }
+    else if(action==="deuda-abono-registrar"){
+      var montoD = Number((document.getElementById("deuda-abono-monto")||{}).value)||0;
+      var metD = (document.getElementById("deuda-abono-metodo")||{}).getAttribute ? document.getElementById("deuda-abono-metodo").getAttribute("data-selected")||"efectivo" : "efectivo";
+      if(montoD <= 0){ alert("Escribe el monto que abona."); return; }
+      var pendD = pendientesDeCliente(draft.cliente), resto = montoD, aplicadas = 0;
+      pendD.forEach(function(v){ if(resto <= 0.009) return; var m = Math.min(resto, saldoPendiente(v)); if(registrarAbono(v, m, metD)){ resto -= m; aplicadas++; } });
+      refrescarDeudaCliente();
+      alert("Abono registrado: "+fmt(montoD - Math.max(resto,0))+" ("+metodoLabel(metD)+") en "+aplicadas+" nota"+(aplicadas===1?"":"s")+".");
+    }
     else if(action==="abono-inicial-metodo"){
       var wrap = document.getElementById("abono-inicial-metodo");
       if(wrap){
@@ -3404,7 +3455,7 @@
       if(totalEl) totalEl.textContent = fmt(draftTotal());
       if(field==="producto") showProductoSuggestions(idx, t.value);
     }
-    else if(t.id==="f-cliente"){ showClienteSuggestions(t.value); }
+    else if(t.id==="f-cliente"){ draft.cliente = t.value; showClienteSuggestions(t.value); refrescarDeudaCliente(); }
     else if(t.id==="productos-buscar"){
       ui.productosBuscar = t.value;
       var contP = document.getElementById("productos-filas");
