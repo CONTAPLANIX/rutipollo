@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "23 sep · v40";
+  var APP_VERSION = "23 sep · v41";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1012,6 +1012,8 @@
               return;
             }
             var yo = Object.assign({}, snap.data(), { id:snap.id, _synced:true });
+            var loginEn = 0; try{ loginEn = Number(localStorage.getItem("lr_login_at_v1")||0); }catch(e){}
+            if(yo.cerrarSesionEn && Number(yo.cerrarSesionEn) > loginEn && currentUser){ logout(); return; }
             iniciarVentas(esAdmin(yo), yo.nombre);
             if(esAdmin(yo)){
               if(!listaAdminConectada){
@@ -1302,6 +1304,7 @@
 
   function loginAs(u){
     currentUser = { id:u.id, nombre:u.nombre, rol:u.rol||"vendedor" };
+    try{ localStorage.setItem("lr_login_at_v1", String(Date.now())); }catch(e){}
     try{ localStorage.setItem(LS.currentUser, JSON.stringify(currentUser)); }catch(e){}
     closeGate();
     updateUserBadge();
