@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "23 sep · v39";
+  var APP_VERSION = "23 sep · v40";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1368,6 +1368,8 @@
 
   // ---------- rendering ----------
 
+  // Los totales (sumas) son confidenciales: solo las administradoras los ven. Cada nota si muestra su importe.
+  function verTotales(){ return !currentUser || esAdmin(currentUser); }
   function aplicarPestanasPorRol(){
     var b = document.querySelector('.tab-btn[data-tab="resumen"]');
     if(b) b.style.display = (currentUser && !esAdmin(currentUser)) ? "none" : "";
@@ -1408,7 +1410,7 @@
     var todayStr = todayISO();
     var ventasHoy = state.ventas.filter(function(v){ return v.fecha===todayStr; });
     var totalHoy = ventasHoy.reduce(function(s,v){return s+v.total;},0);
-    var hoyStrip = '<div class="today-strip"><span>Hoy · '+ventasHoy.length+' nota'+(ventasHoy.length===1?'':'s')+'</span><span class="amt mono">'+fmt(totalHoy)+'</span></div>';
+    var hoyStrip = '<div class="today-strip"><span>Hoy · '+ventasHoy.length+' nota'+(ventasHoy.length===1?'':'s')+'</span>'+(verTotales() ? '<span class="amt mono">'+fmt(totalHoy)+'</span>' : '')+'</div>';
 
     var editing = state.ventas.find(function(v){ return v.id===editingVentaId; });
     var rows = draft.items.map(itemRowHtml).join("");
@@ -1523,10 +1525,10 @@
               + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
               + '</div>';
           }).join("");
-          return '<div class="day-block"><div class="day-head"><span>'+d+' '+MESES_ABR[m-1]+'</span><span class="mono">'+fmt(dTotal)+'</span></div>'+rows+'</div>';
+          return '<div class="day-block"><div class="day-head"><span>'+d+' '+MESES_ABR[m-1]+'</span><span class="mono">'+(verTotales() ? fmt(dTotal) : '')+'</span></div>'+rows+'</div>';
         }).join("");
         var open = (m===currentMonth && ui.historialYear===(new Date()).getFullYear()) ? " open" : "";
-        return '<details class="month"'+open+'><summary>'+MESES[m-1]+' <span class="chev">▾</span> <span class="month-total">'+fmt(mTotal)+'</span></summary>'+daysHtml+'</details>';
+        return '<details class="month"'+open+'><summary>'+MESES[m-1]+' <span class="chev">▾</span> <span class="month-total">'+(verTotales() ? fmt(mTotal) : '')+'</span></summary>'+daysHtml+'</details>';
       }).join("");
     }
 
@@ -1550,7 +1552,7 @@
       + '<h1 class="section-title">Historial de ventas</h1>'
       + '<p class="section-sub">Organizado por año, mes y día.</p>'
       + avisoRespaldo
-      + '<div class="toolbar">'+yearSel+'<span class="mono" style="color:var(--ink-soft);font-size:13px;">Total '+ui.historialYear+': <strong style="color:var(--ink);">'+fmt(totalYear)+'</strong></span></div>'
+      + '<div class="toolbar">'+yearSel+(verTotales() ? '<span class="mono" style="color:var(--ink-soft);font-size:13px;">Total '+ui.historialYear+': <strong style="color:var(--ink);">'+fmt(totalYear)+'</strong></span>' : '')+'</div>'
       + '<div class="toolbar" style="margin-top:-6px;">'+actionBar+'</div>'
       + body;
   }
@@ -1922,7 +1924,7 @@
       + '<h1 class="section-title">Deudores</h1>'
       + '<p class="section-sub">Busca un cliente para ver cuánto debe por mes y día. Al recibir el dinero, pon el monto y toca "Cobrado" con el método: si es todo el saldo, la nota deja de aparecer como pendiente.</p>'
       + vistaToggle
-      + '<div class="toolbar">'+soloMiosToggleHtml()+'<span class="mono" style="color:var(--danger);font-weight:600;">Total por cobrar: '+fmt(totalPendiente)+'</span></div>'
+      + '<div class="toolbar">'+soloMiosToggleHtml()+(verTotales() ? '<span class="mono" style="color:var(--danger);font-weight:600;">Total por cobrar: '+fmt(totalPendiente)+'</span>' : '')+'</div>'
       + '<div class="field" style="max-width:420px;"><label for="cobrar-buscar">🔍 Buscar deudor (cliente que debe)</label><input id="cobrar-buscar" type="search" autocomplete="off" placeholder="Escribe el nombre del cliente" value="'+escapeHtml(ui.cobrarBuscar)+'"></div>'
       + '<div id="cobrar-lista">'+cobrarListaHtml(pendientes)+'</div>';
   }
