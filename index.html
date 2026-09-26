@@ -446,7 +446,7 @@
     ventas: [],
     productos: [],
     clientes: [],
-    usuarios: [], nombresPublicos: [],
+    usuarios: [], nombresPublicos: [], papelera: [],
     negocio: { nombre: "Rico Pollo Dissur", telefono: "", pie: "Gracias por su Compra. ¡Hasta la próxima entrega!", pedidos: "972717155 | 937355968", logo: "assets/logo.png" },
     db: null,
     dbReady: false
@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "26 sep · v43";
+  var APP_VERSION = "26 sep · v44";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -857,7 +857,13 @@
       } else {
         var idx = state.ventas.findIndex(function(v){ return v.id===ch.doc.id; });
         var data = Object.assign({}, ch.doc.data(), { id:ch.doc.id, _synced:true });
-        if(data.eliminado){ if(idx>-1) state.ventas.splice(idx, 1); return; }
+        if(data.eliminado){
+          if(idx>-1) state.ventas.splice(idx, 1);
+          var pi = state.papelera.findIndex(function(p){ return p.id===data.id; });
+          if(pi>-1) state.papelera[pi] = data; else state.papelera.push(data);
+          return;
+        }
+        state.papelera = state.papelera.filter(function(p){ return p.id!==data.id; });
         if(idx>-1) state.ventas[idx] = data; else state.ventas.push(data);
       }
     });
@@ -1111,6 +1117,8 @@
       // Se guarda como "eliminada" (oculta) con quien y cuando; el documento no se borra del servidor.
       var marca = Object.assign({}, v, { eliminado:true, eliminadoPor:(currentUser?currentUser.nombre:""), eliminadoEn:Date.now() });
       delete marca._synced;
+      state.papelera = state.papelera.filter(function(p){ return p.id!==id; });
+      state.papelera.push(Object.assign({}, marca, { _synced:true }));
       pendingDeletes.ventas.push({ id:id, marca:marca }); persistPending();
     }
     renderTab();
@@ -1118,6 +1126,33 @@
     syncPending();
   }
 
+  // Restaurar una nota desde la papelera: vuelve a la lista y se sube sin la marca "eliminado".
+  function restaurarVenta(id){
+    var p = state.papelera.find(function(x){ return x.id===id; });
+    if(!p) return;
+    var v = Object.assign({}, p); delete v.eliminado; delete v.eliminadoPor; delete v.eliminadoEn; v._synced = false;
+    state.papelera = state.papelera.filter(function(x){ return x.id!==id; });
+    pendingDeletes.ventas = pendingDeletes.ventas.filter(function(x){ return ((x && x.id) || x)!==id; }); persistPending();
+    state.ventas.push(v);
+    state.ventas.sort(function(a,b){ return (b.creadoEn||0)-(a.creadoEn||0); });
+    persist("ventas"); refreshSyncBadge(); syncPending();
+  }
+  function openPapelera(){
+    var root = document.getElementById("overlay-root");
+    var lista = state.papelera.slice().sort(function(a,b){ return (Number(b.eliminadoEn)||0)-(Number(a.eliminadoEn)||0); });
+    var rows = lista.length ? lista.map(function(v){
+      var cuando = v.eliminadoEn ? new Date(Number(v.eliminadoEn)).toLocaleString("es-PE", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+      return '<div class="note-row" style="flex-wrap:wrap;">'
+        + '<div class="who"><span class="corr">N° '+numNota(v)+'</span> — '+escapeHtml(v.cliente)+'<div style="font-size:12px;color:var(--ink-soft);">'+fechaDisplay(v.fecha)+' · '+escapeHtml(v.vendedor||"")+' · eliminada '+escapeHtml(cuando)+(v.eliminadoPor?' por '+escapeHtml(v.eliminadoPor):'')+'</div></div>'
+        + '<div style="display:flex;align-items:center;gap:8px;"><span class="amt">'+fmt(v.total)+'</span><button class="btn btn-sm btn-primary" data-action="restaurar-venta" data-id="'+v.id+'">↩ Restaurar</button></div>'
+        + '</div>';
+    }).join("") : '<p class="empty">La papelera est\u00e1 vac\u00eda.</p>';
+    root.innerHTML = '<div class="overlay" data-action="cerrar-overlay"><div class="modal">'
+      + '<h2>🗑 Papelera</h2><p class="section-sub">Notas eliminadas. Al restaurar vuelven al Historial, Resumen y Deudores tal como estaban.</p>'
+      + '<div class="card" style="padding:6px 16px;">'+rows+'</div>'
+      + '<div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cerrar</button></div>'
+      + '</div></div>';
+  }
   function saveProducto(p){
     if(p.id){
       var idx = state.productos.findIndex(function(x){ return x.id===p.id; });
@@ -1297,7 +1332,7 @@
 
   function esAdmin(u){ return !!(u && u.rol==="admin"); }
 
-  var ACCIONES_SOLO_ADMIN = ["editar-venta","eliminar-venta","activar-seleccion","seleccionar-todo-anio","eliminar-seleccionadas","editar-cliente","eliminar-cliente","editar-producto","eliminar-producto"];
+  var ACCIONES_SOLO_ADMIN = ["abrir-papelera","restaurar-venta","editar-venta","eliminar-venta","activar-seleccion","seleccionar-todo-anio","eliminar-seleccionadas","editar-cliente","eliminar-cliente","editar-producto","eliminar-producto"];
   function puedeGestionar(){
     if(!currentUser) return false;
     if(esAdmin(currentUser)) return true;
@@ -1567,6 +1602,7 @@
         + (ventasYear.length ? '<button class="btn btn-sm" data-action="exportar-csv">⬇ Exportar '+ui.historialYear+'</button>' : '')
         + (state.ventas.length ? '<button class="btn btn-sm" data-action="exportar-todo-csv">⬇ Respaldo completo</button>' : '')
         + (state.ventas.length ? '<button class="btn btn-sm" data-action="abrir-descarga-masiva">⬇ PDFs por rango</button>' : '')
+        + (esAdmin(currentUser) ? '<button class="btn btn-sm" data-action="abrir-papelera">🗑 Papelera'+(state.papelera.length?' ('+state.papelera.length+')':'')+'</button>' : '')
         + (ventasYear.length && puedeGestionar() ? '<button class="btn btn-sm" data-action="activar-seleccion">Seleccionar / eliminar varias</button>' : '');
 
     var diasResp = diasDesdeRespaldo();
@@ -3402,6 +3438,8 @@
     else if(action==="exportar-csv"){ exportarCSV(); }
     else if(action==="exportar-todo-csv"){ exportarTodoCSV(); }
     else if(action==="abrir-descarga-masiva"){ openDescargaMasivaModal(); }
+    else if(action==="abrir-papelera"){ if(esAdmin(currentUser)) openPapelera(); }
+    else if(action==="restaurar-venta"){ if(esAdmin(currentUser)){ restaurarVenta(t.getAttribute("data-id")); openPapelera(); renderTab(); } }
     else if(action==="rango-preset"){
       var preset = t.getAttribute("data-preset");
       var hoyP = todayISO();
@@ -3585,6 +3623,7 @@
       if(contP) contP.innerHTML = productosFilasHtml();
     }
     else if(t.id==="hist-buscar"){ ui.historialBuscar = t.value; clearTimeout(window.__hb); window.__hb = setTimeout(function(){ var el = document.getElementById("hist-buscar"); var pos = el ? el.selectionStart : 0; renderTab(); var el2 = document.getElementById("hist-buscar"); if(el2){ el2.focus(); try{ el2.setSelectionRange(pos,pos); }catch(e){} } }, 250); }
+    else if(t.id==="mixto-monto-a"){ draft.mixto = draft.mixto || { mA:"efectivo", montoA:"", mB:"yape" }; draft.mixto.montoA = t.value; var mbi = document.getElementById("mixto-monto-b"); if(mbi) mbi.textContent = fmt(Math.max(0, draftTotal() - (Number(t.value)||0))); }
     else if(t.id==="clientes-buscar"){
       ui.clientesBuscar = t.value;
       var contC = document.getElementById("clientes-lista");
