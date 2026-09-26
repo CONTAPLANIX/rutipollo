@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "26 sep · v44";
+  var APP_VERSION = "26 sep · v45";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1332,7 +1332,7 @@
 
   function esAdmin(u){ return !!(u && u.rol==="admin"); }
 
-  var ACCIONES_SOLO_ADMIN = ["abrir-papelera","restaurar-venta","editar-venta","eliminar-venta","activar-seleccion","seleccionar-todo-anio","eliminar-seleccionadas","editar-cliente","eliminar-cliente","editar-producto","eliminar-producto"];
+  var ACCIONES_SOLO_ADMIN = ["exportar-resumen-pdf","abrir-papelera","restaurar-venta","editar-venta","eliminar-venta","activar-seleccion","seleccionar-todo-anio","eliminar-seleccionadas","editar-cliente","eliminar-cliente","editar-producto","eliminar-producto"];
   function puedeGestionar(){
     if(!currentUser) return false;
     if(esAdmin(currentUser)) return true;
@@ -1669,6 +1669,101 @@
     return '<details class="month vend-box" open><summary>Ventas por vendedor · '+escapeHtml(titulo)+' <span class="chev">▾</span></summary><div class="day-block">'+filas+'</div></details>';
   }
 
+
+  // ---------- Resumen en PDF (A4): totales, por forma de pago, por vendedor, por cliente y por periodo ----------
+  function resumenPdfPeriodo(){
+    if(ui.resumenMonth===0) return { titulo:"Anio "+ui.resumenYear, pool:groupByYear(ui.resumenYear), modo:"anio" };
+    if(ui.resumenVista==="undia"){ var d = ui.resumenDiaSel || todayISO(); return { titulo:"Dia "+fechaDisplay(d), pool:poolResumenPorScope("day"), modo:"dia" }; }
+    if(ui.resumenVista==="semanas") return { titulo:MESES[ui.resumenMonth-1]+" "+ui.resumenYear+" (por semanas)", pool:poolResumenPorScope("month"), modo:"semana" };
+    return { titulo:MESES[ui.resumenMonth-1]+" "+ui.resumenYear, pool:poolResumenPorScope("month"), modo:"mes" };
+  }
+  function pdfTxt(t){ return String(t==null?"":t).normalize("NFD").replace(/[̀-ͯ]/g,""); }
+  function agrupar(pool, clave){
+    var m = {};
+    pool.forEach(function(v){
+      var k = clave(v); if(!m[k]) m[k] = { clave:k, notas:0, total:0, cobrado:0, pendiente:0, efectivo:0, banco:0, yape:0, plin:0 };
+      var g = m[k]; g.notas++; g.total += Number(v.total)||0;
+      ["efectivo","banco","yape","plin"].forEach(function(me){ g[me] += cobradoVenta(v, me); });
+      g.cobrado = g.efectivo + g.banco + g.yape + g.plin;
+      if(estaPendiente(v)) g.pendiente += saldoPendiente(v);
+    });
+    return Object.keys(m).map(function(k){ return m[k]; });
+  }
+  function exportarResumenPdf(){
+    var J = window.jspdf && window.jspdf.jsPDF; if(!J){ alert("El generador de PDF aun no carga. Intenta de nuevo."); return; }
+    var per = resumenPdfPeriodo(), pool = per.pool.slice();
+    if(!pool.length){ alert("No hay ventas en el periodo elegido."); return; }
+    var filtroV = (esAdmin(currentUser) && ui.vendedorFiltro) ? " - vendedor "+ui.vendedorFiltro : "";
+    var doc = new J({ unit:"mm", format:"a4" }); var W = 210, M = 12, y = 14;
+    function salto(h){ if(y + h > 285){ doc.addPage(); y = 14; } }
+    function titulo(t, size){ salto(10); doc.setFont("helvetica","bold"); doc.setFontSize(size||12); doc.text(pdfTxt(t), M, y); y += (size||12)*0.5 + 2; }
+    function tabla(cols, filas, anchos, alinDer){
+      // cols: titulos; filas: arrays de texto; anchos: mm; alinDer: indices alineados a la derecha
+      var x0 = M, h = 6;
+      function cab(){ salto(h+2); doc.setFillColor(240,240,240); doc.rect(x0, y-4.2, anchos.reduce(function(a,b){return a+b;},0), h, "F"); doc.setFont("helvetica","bold"); doc.setFontSize(8.5);
+        var x = x0; cols.forEach(function(c,i){ var der = alinDer.indexOf(i)>-1; doc.text(pdfTxt(c), der ? x+anchos[i]-1.5 : x+1.5, y, der?{align:"right"}:{}); x += anchos[i]; }); y += h; }
+      cab(); doc.setFont("helvetica","normal"); doc.setFontSize(8.5);
+      filas.forEach(function(f){
+        if(y + h > 285){ doc.addPage(); y = 14; cab(); doc.setFont("helvetica","normal"); doc.setFontSize(8.5); }
+        var x = x0; f.forEach(function(c,i){ var der = alinDer.indexOf(i)>-1; var t = pdfTxt(c); var maxW = anchos[i]-3; if(doc.getTextWidth(t) > maxW){ while(t.length>1 && doc.getTextWidth(t+"...") > maxW) t = t.slice(0,-1); t += "..."; }
+          doc.text(t, der ? x+anchos[i]-1.5 : x+1.5, y, der?{align:"right"}:{}); x += anchos[i]; });
+        doc.setDrawColor(220); doc.line(x0, y+1.6, x0+anchos.reduce(function(a,b){return a+b;},0), y+1.6); y += h;
+      });
+      y += 3;
+    }
+    var n2 = function(n){ return (Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); };
+
+    doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text(pdfTxt(state.negocio.nombre||"Rico Pollo Dissur"), M, y); y += 7;
+    doc.setFontSize(12); doc.text(pdfTxt("Resumen de ventas - "+per.titulo+filtroV), M, y); y += 5;
+    doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(110); doc.text(pdfTxt("Generado el "+new Date().toLocaleString("es-PE")+" por "+(currentUser?currentUser.nombre:"")+". Montos en soles, sin IGV."), M, y); doc.setTextColor(0); y += 8;
+
+    // 1) Totales y formas de pago
+    var tot = agrupar(pool, function(){ return "todo"; })[0];
+    titulo("Totales del periodo");
+    tabla(["Notas","Vendido","Cobrado","Efectivo","Banco","Yape","Plin","Por cobrar"],
+      [[String(tot.notas), n2(tot.total), n2(tot.cobrado), n2(tot.efectivo), n2(tot.banco), n2(tot.yape), n2(tot.plin), n2(tot.pendiente)]],
+      [18,25,25,23,23,23,23,26], [0,1,2,3,4,5,6,7]);
+
+    // 2) Por vendedor
+    var porV = agrupar(pool, function(v){ return v.vendedor||"(sin vendedor)"; }).sort(function(a,b){ return b.total-a.total; });
+    titulo("Por vendedor");
+    tabla(["Vendedor","Notas","Vendido","Efectivo","Banco","Yape","Plin","Por cobrar"],
+      porV.map(function(g){ return [g.clave, String(g.notas), n2(g.total), n2(g.efectivo), n2(g.banco), n2(g.yape), n2(g.plin), n2(g.pendiente)]; }),
+      [40,14,26,22,22,22,22,26], [1,2,3,4,5,6,7]);
+
+    // 3) Por periodo (dia / semana / mes)
+    var etiqueta, clavePer;
+    if(per.modo==="anio"){ etiqueta = "Por mes"; clavePer = function(v){ return String(v.mes).padStart(2,"0")+" "+MESES[v.mes-1]; }; }
+    else if(per.modo==="semana"){ etiqueta = "Por semana"; clavePer = function(v){ var w = Math.min(5, Math.floor((v.dia-1)/7)+1); return "Semana "+w+" ("+((w-1)*7+1)+"-"+(w===5?new Date(v.anio,v.mes,0).getDate():w*7)+")"; }; }
+    else { etiqueta = "Por dia"; clavePer = function(v){ return v.fecha; }; }
+    if(per.modo!=="dia"){
+      var porP = agrupar(pool, clavePer).sort(function(a,b){ return a.clave<b.clave?-1:1; });
+      titulo(etiqueta);
+      tabla([etiqueta.replace("Por ",""),"Notas","Vendido","Efectivo","Banco","Yape","Plin","Por cobrar"],
+        porP.map(function(g){ return [per.modo==="anio" ? g.clave.slice(3) : (per.modo==="semana" ? g.clave : fechaDisplay(g.clave)), String(g.notas), n2(g.total), n2(g.efectivo), n2(g.banco), n2(g.yape), n2(g.plin), n2(g.pendiente)]; }),
+        [40,14,26,22,22,22,22,26], [1,2,3,4,5,6,7]);
+    }
+
+    // 4) Por cliente
+    var porC = agrupar(pool, function(v){ return v.cliente||"(sin cliente)"; }).sort(function(a,b){ return b.total-a.total; });
+    titulo("Por cliente");
+    tabla(["Cliente","Notas","Vendido","Cobrado","Por cobrar"],
+      porC.map(function(g){ return [g.clave, String(g.notas), n2(g.total), n2(g.cobrado), n2(g.pendiente)]; }),
+      [84,18,28,28,28], [1,2,3,4]);
+
+    // 5) Detalle de notas
+    var det = pool.slice().sort(function(a,b){ return (a.fecha<b.fecha?-1:a.fecha>b.fecha?1:0) || (a.creadoEn||0)-(b.creadoEn||0); });
+    titulo("Detalle de notas ("+det.length+")");
+    tabla(["N. nota","Fecha","Cliente","Vendedor","Total","Pago"],
+      det.map(function(v){
+        var pago = v.tipoPago==="credito" ? (estaPendiente(v) ? "Pendiente"+(montoAbonado(v)>0.009?" (abono "+n2(montoAbonado(v))+")":"") : "Pagado") : (v.metodoPago==="mixto" && v.abonos ? v.abonos.map(function(a){ return metodoLabel(a.metodo)+" "+n2(a.monto); }).join(" + ") : metodoLabel(v.metodoPago));
+        return [numNota(v), fechaDisplay(v.fecha), v.cliente, v.vendedor||"", n2(v.total), pago];
+      }), [22,24,58,24,24,34], [4]);
+
+    var nombre = "resumen_"+pdfTxt(per.titulo).replace(/[^A-Za-z0-9]+/g,"_")+(filtroV?"_"+ui.vendedorFiltro:"")+".pdf";
+    triggerDownload(nombre, doc.output("blob"));
+  }
+
   function viewResumen(){
     var monthLabel = ui.resumenMonth===0 ? "Todo el año" : MESES[ui.resumenMonth-1];
     var anios = {}; state.ventas.forEach(function(v){ if(v.anio) anios[v.anio] = true; });
@@ -1680,7 +1775,7 @@
       + '<option value="0"'+(ui.resumenMonth===0?' selected':'')+'>Todo el año</option>'
       + MESES.map(function(m, i){ return '<option value="'+(i+1)+'"'+(ui.resumenMonth===i+1?' selected':'')+'>'+m+'</option>'; }).join("")
       + '</select></label>';
-    var toolbar = '<div class="toolbar">'+yearStepper+monthStepper+soloMiosToggleHtml()+'</div>';
+    var toolbar = '<div class="toolbar">'+yearStepper+monthStepper+soloMiosToggleHtml()+(esAdmin(currentUser) ? '<button class="btn btn-sm" data-action="exportar-resumen-pdf">⬇ Exportar PDF</button>' : '')+'</div>';
 
     var ventasYear = groupByYear(ui.resumenYear);
 
@@ -3438,6 +3533,7 @@
     else if(action==="exportar-csv"){ exportarCSV(); }
     else if(action==="exportar-todo-csv"){ exportarTodoCSV(); }
     else if(action==="abrir-descarga-masiva"){ openDescargaMasivaModal(); }
+    else if(action==="exportar-resumen-pdf"){ if(esAdmin(currentUser)) exportarResumenPdf(); }
     else if(action==="abrir-papelera"){ if(esAdmin(currentUser)) openPapelera(); }
     else if(action==="restaurar-venta"){ if(esAdmin(currentUser)){ restaurarVenta(t.getAttribute("data-id")); openPapelera(); renderTab(); } }
     else if(action==="rango-preset"){
