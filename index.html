@@ -455,7 +455,7 @@
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
   var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: (new Date()).getMonth()+1, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
     gateMode: "login", gateSelectedId: null, gateError: "", soloMisVentas: false, vendedorFiltro: "",
-    cobrarVista: "pendientes", cobrarAgrupar: "dia", cobrarBuscar: "", clientesBuscar: "", productosBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
+    cobrarVista: "pendientes", cobrarAgrupar: "dia", historialBuscar: "", cobrarBuscar: "", clientesBuscar: "", productosBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
 
   var LS = { ventas:"lr_ventas_v1", productos:"lr_productos_v1", clientes:"lr_clientes_v1", negocio:"lr_negocio_v1", pending:"lr_pending_deletes_v1", usuarios:"lr_usuarios_v1", currentUser:"lr_current_user_v1", lastBackup:"lr_last_backup_v1" };
   var pendingDeletes = { ventas:[], productos:[], clientes:[], usuarios:[] };
@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "26 sep · v42";
+  var APP_VERSION = "26 sep · v43";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -549,6 +549,9 @@
     return '<span class="pay-tag '+metodoTagClass(v.metodoPago)+'">'+metodoAbrev(v.metodoPago)+'</span>';
   }
   function cobradoVenta(v, metodo){
+    if(v.tipoPago!=="credito" && estaPagado(v) && Array.isArray(v.abonos) && v.abonos.length){
+      return v.abonos.reduce(function(s,a){ return s + (metodoTagClass(a.metodo)===metodo ? (Number(a.monto)||0) : 0); }, 0);
+    }
     if(v.tipoPago==="credito"){
       return abonosEfectivos(v).reduce(function(s,a){ return s + (metodoTagClass(a.metodo)===metodo ? (Number(a.monto)||0) : 0); }, 0);
     }
@@ -1393,6 +1396,22 @@
     });
   }
 
+  // Pago con dos formas (ej. parte efectivo y parte Yape): la segunda parte se calcula sola.
+  function mixtoHtml(){
+    var mx = draft.mixto || (draft.mixto = { mA:"efectivo", montoA:"", mB:"yape" });
+    var total = draftTotal(); var a = Number(mx.montoA)||0; var b = Math.max(0, Math.round((total - a)*100)/100);
+    function botones(campo, sel){
+      return ["efectivo","banco","yape","plin"].map(function(m){
+        return '<button type="button" class="pay-opt '+(m==="yape"||m==="plin"?m:"")+(sel===m?" on":"")+'" data-action="mixto-metodo" data-campo="'+campo+'" data-val="'+m+'">'+metodoLabel(m)+'</button>';
+      }).join("");
+    }
+    return '<div class="card" style="padding:12px 14px;margin-top:10px;background:var(--paper-alt);">'
+      + '<div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">1\u00aa parte</div>'
+      + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><div class="pay-toggle" style="margin:0;">'+botones("mA", mx.mA)+'</div><input type="number" id="mixto-monto-a" min="0" step="0.01" placeholder="S/ monto" value="'+(mx.montoA===""?"":mx.montoA)+'" style="width:110px;"></div>'
+      + '<div style="font-size:12.5px;font-weight:600;margin:10px 0 6px;">2\u00aa parte <span style="font-weight:400;color:var(--ink-soft);">(el resto: <strong id="mixto-monto-b">'+fmt(b)+'</strong>)</span></div>'
+      + '<div class="pay-toggle" style="margin:0;">'+botones("mB", mx.mB)+'</div>'
+      + '</div>';
+  }
   function itemRowHtml(item, idx){
     var sub = subtotalItem(item);
     return '<tr data-row="'+idx+'">'
@@ -1450,7 +1469,9 @@
             + '    <button type="button" class="pay-opt'+(draft.metodoPago==="banco"?" on":"")+'" data-action="pago" data-val="banco">Banco</button>'
             + '    <button type="button" class="pay-opt yape'+(draft.metodoPago==="yape"?" on":"")+'" data-action="pago" data-val="yape">Yape</button>'
             + '    <button type="button" class="pay-opt plin'+(draft.metodoPago==="plin"?" on":"")+'" data-action="pago" data-val="plin">Plin</button>'
-            + '  </div></div>')
+            + '    <button type="button" class="pay-opt'+(draft.metodoPago==="mixto"?" on":"")+'" data-action="pago" data-val="mixto">Dos formas</button>'
+            + '  </div></div>'
+            + (draft.metodoPago==="mixto" ? mixtoHtml() : ''))
       + '  <div class="field"><label for="f-notas">Notas (opcional)</label><textarea id="f-notas" rows="2" placeholder="Referencias de entrega, etc.">'+escapeHtml(draft.notas)+'</textarea></div>'
       + '  <div class="total-row">Total <span class="amt mono" id="draft-total">'+fmt(draftTotal())+'</span></div>'
       + '  <div class="actions-row">'
@@ -1499,6 +1520,8 @@
     }).join("") + '</select>';
 
     var ventasYear = groupByYear(ui.historialYear);
+    var qh = (ui.historialBuscar||"").trim().toLowerCase();
+    if(qh) ventasYear = ventasYear.filter(function(v){ return String(v.cliente||"").toLowerCase().indexOf(qh)>-1 || numNota(v).toLowerCase().indexOf(qh)>-1; });
     var totalYear = ventasYear.reduce(function(s,v){return s+v.total;},0);
 
     var body;
@@ -1555,6 +1578,7 @@
       + '<h1 class="section-title">Historial de ventas</h1>'
       + '<p class="section-sub">Organizado por año, mes y día.</p>'
       + avisoRespaldo
+      + '<div class="field" style="max-width:420px;"><label for="hist-buscar">Buscar por cliente o N de nota</label><input id="hist-buscar" type="search" autocomplete="off" placeholder="Ej: Bodega Rios o C-000120" value="'+escapeHtml(ui.historialBuscar||"")+'"></div>'
       + '<div class="toolbar">'+yearSel+(verTotales() ? '<span class="mono" style="color:var(--ink-soft);font-size:13px;">Total '+ui.historialYear+': <strong style="color:var(--ink);">'+fmt(totalYear)+'</strong></span>' : '')+'</div>'
       + '<div class="toolbar" style="margin-top:-6px;">'+actionBar+'</div>'
       + body;
@@ -2365,7 +2389,9 @@
     var L = [];
     if(v.tipoPago!=="credito"){
       L.push(["Pago","Al contado"]);
-      L.push(["Método",metodoLabel(v.metodoPago)]);
+      if(v.metodoPago==="mixto" && Array.isArray(v.abonos) && v.abonos.length){
+        v.abonos.forEach(function(a){ L.push([metodoLabel(a.metodo), fmt(a.monto)]); });
+      } else L.push(["Método",metodoLabel(v.metodoPago)]);
       return L;
     }
     var ab = abonosEfectivos(v);
@@ -3175,6 +3201,7 @@
       renderTab();
     }
     else if(action==="pago"){ draft.metodoPago = t.getAttribute("data-val"); renderTab(); }
+    else if(action==="mixto-metodo"){ draft.mixto = draft.mixto || { mA:"efectivo", montoA:"", mB:"yape" }; draft.mixto[t.getAttribute("data-campo")] = t.getAttribute("data-val"); renderTab(); }
     else if(action==="deuda-abono-metodo"){
       var wrapD = document.getElementById("deuda-abono-metodo");
       if(wrapD){ wrapD.setAttribute("data-selected", t.getAttribute("data-val")); Array.prototype.forEach.call(wrapD.querySelectorAll(".pay-opt"), function(b){ b.classList.remove("on"); }); t.classList.add("on"); }
@@ -3228,6 +3255,14 @@
       var tipoPago = draft.tipoPago==="credito" ? "credito" : "contado";
       var pagado = tipoPago==="contado";
       var metodoFinal = pagado ? (draft.metodoPago||"efectivo") : null;
+      var abonosMixto = null;
+      if(pagado && metodoFinal==="mixto"){
+        var mx = draft.mixto || { mA:"efectivo", montoA:"", mB:"yape" };
+        var pA = Math.min(Math.max(Number(mx.montoA)||0, 0), total);
+        if(pA <= 0.009 || pA >= total - 0.009){ alert("En 'Dos formas' escribe el monto de la primera parte (mayor que 0 y menor que el total)."); return; }
+        if(mx.mA === mx.mB){ alert("Las dos formas de pago deben ser distintas."); return; }
+        abonosMixto = [{ monto: Math.round(pA*100)/100, metodo: mx.mA, fecha: fecha }, { monto: Math.round((total-pA)*100)/100, metodo: mx.mB, fecha: fecha }];
+      }
       var fechaPago = pagado ? fecha : null;
       if(editingVentaId){
         var original = state.ventas.find(function(v){ return v.id===editingVentaId; });
@@ -3239,7 +3274,7 @@
         editingVentaId = null;
         draft = { fecha: todayISO(), cliente:"", notas:"", tipoPago:"contado", metodoPago:"efectivo", items:[blankItem()] };
         renderTab();
-        if(tipoPago==="contado"){ delete ventaEditada.abonos; }
+        if(tipoPago==="contado"){ if(abonosMixto) ventaEditada.abonos = abonosMixto; else delete ventaEditada.abonos; }
         updateVenta(ventaEditada);
         if(abonoEdMonto > 0.009){
           var vEnEstado = state.ventas.find(function(x){ return x.id===ventaEditada.id; }) || ventaEditada;
@@ -3249,6 +3284,7 @@
       } else {
         var vendNombre = currentUser ? currentUser.nombre : "";
         var venta = { fecha:fecha, anio:fp.anio, mes:fp.mes, dia:fp.dia, cliente:cliente, items:validItems, total:total, redondeo:true, notas:notas, tipoPago:tipoPago, metodoPago:metodoFinal, pagado:pagado, fechaPago:fechaPago, vendedor: vendNombre, serie: serieDe(vendNombre), correlativo: siguienteCorrelativo(vendNombre), creadoEn:Date.now() };
+        if(abonosMixto) venta.abonos = abonosMixto;
         if(tipoPago==="credito"){
           var abonoInicialEl = document.getElementById("f-abono-inicial");
           var abonoInicialMonto = abonoInicialEl ? Math.min(Number(abonoInicialEl.value)||0, total) : 0;
@@ -3281,6 +3317,7 @@
       if(ve){
         editingVentaId = ve.id;
         draft = { fecha: ve.fecha, cliente: ve.cliente, notas: ve.notas||"", tipoPago: ve.tipoPago==="credito"?"credito":"contado", metodoPago: ve.metodoPago||"efectivo",
+          mixto: (ve.metodoPago==="mixto" && ve.abonos && ve.abonos.length>=2) ? { mA: ve.abonos[0].metodo, montoA: ve.abonos[0].monto, mB: ve.abonos[1].metodo } : undefined,
           items: ve.items.map(function(i){ var o = { producto:i.producto, cantidad:i.cantidad, kg:(i.kg||""), precio:i.precio }; if(i.codigo) o.codigo = i.codigo; return o; }) };
         closeOverlay();
         state.tab = "nueva";
@@ -3547,6 +3584,7 @@
       var contP = document.getElementById("productos-filas");
       if(contP) contP.innerHTML = productosFilasHtml();
     }
+    else if(t.id==="hist-buscar"){ ui.historialBuscar = t.value; clearTimeout(window.__hb); window.__hb = setTimeout(function(){ var el = document.getElementById("hist-buscar"); var pos = el ? el.selectionStart : 0; renderTab(); var el2 = document.getElementById("hist-buscar"); if(el2){ el2.focus(); try{ el2.setSelectionRange(pos,pos); }catch(e){} } }, 250); }
     else if(t.id==="clientes-buscar"){
       ui.clientesBuscar = t.value;
       var contC = document.getElementById("clientes-lista");
@@ -3621,6 +3659,7 @@
         if(totalEl) totalEl.textContent = fmt(draftTotal());
       }
     }
+    else if(t.id==="mixto-monto-a"){ draft.mixto = draft.mixto || { mA:"efectivo", montoA:"", mB:"yape" }; draft.mixto.montoA = t.value; var mb = document.getElementById("mixto-monto-b"); if(mb) mb.textContent = fmt(Math.max(0, draftTotal() - (Number(t.value)||0))); }
     else if(t.id==="f-fecha"){ draft.fecha = t.value; }
     else if(t.id==="f-cliente"){ draft.cliente = t.value; }
     else if(t.id==="f-notas"){ draft.notas = t.value; }
