@@ -455,7 +455,7 @@
   var draft = { fecha: todayISO(), cliente: "", notas: "", tipoPago: "contado", metodoPago: "efectivo", items: [ blankItem() ] };
   var ui = { historialYear: (new Date()).getFullYear(), resumenYear: (new Date()).getFullYear(), resumenMonth: (new Date()).getMonth()+1, resumenVista: "dias", resumenDiaSel: null, editingProductoId: null, editingClienteId: null, selectMode: false, selected: {},
     gateMode: "login", gateSelectedId: null, gateError: "", soloMisVentas: false, vendedorFiltro: "",
-    cobrarVista: "pendientes", cobrarBuscar: "", clientesBuscar: "", productosBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
+    cobrarVista: "pendientes", cobrarAgrupar: "dia", cobrarBuscar: "", clientesBuscar: "", productosBuscar: "", cobrarYear: (new Date()).getFullYear(), cobrarMonth: (new Date()).getMonth()+1 };
 
   var LS = { ventas:"lr_ventas_v1", productos:"lr_productos_v1", clientes:"lr_clientes_v1", negocio:"lr_negocio_v1", pending:"lr_pending_deletes_v1", usuarios:"lr_usuarios_v1", currentUser:"lr_current_user_v1", lastBackup:"lr_last_backup_v1" };
   var pendingDeletes = { ventas:[], productos:[], clientes:[], usuarios:[] };
@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "23 sep · v41";
+  var APP_VERSION = "26 sep · v42";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1866,8 +1866,8 @@
         .forEach(function(v){
           abonosEfectivos(v).forEach(function(a){
             var fp = parseFecha(a.fecha);
-            if(fp.anio===ui.cobrarYear && fp.mes===ui.cobrarMonth){
-              eventos.push({ venta:v, monto:Number(a.monto)||0, metodo:a.metodo, fecha:a.fecha });
+            if(fp.anio===ui.cobrarYear && (ui.cobrarAgrupar==="mes" || fp.mes===ui.cobrarMonth)){
+              eventos.push({ venta:v, monto:Number(a.monto)||0, metodo:a.metodo, fecha:a.fecha, mes:fp.mes, dia:fp.dia });
             }
           });
         });
@@ -1879,7 +1879,44 @@
       var porMetodo = {};
       eventos.forEach(function(ev){ porMetodo[ev.metodo] = (porMetodo[ev.metodo]||0)+ev.monto; });
 
-      var body = !dias.length ? '<p class="empty">Sin cobros de pendientes registrados en '+MESES[ui.cobrarMonth-1]+' '+ui.cobrarYear+'.</p>' : dias.map(function(d){
+      var agrupToggle = '<div class="pay-toggle" style="max-width:360px;margin-bottom:14px;">'
+        + '<button class="pay-opt'+(ui.cobrarAgrupar==="dia"?" on":"")+'" data-action="cobrar-agrupar" data-val="dia">Por día</button>'
+        + '<button class="pay-opt'+(ui.cobrarAgrupar==="semana"?" on":"")+'" data-action="cobrar-agrupar" data-val="semana">Por semana</button>'
+        + '<button class="pay-opt'+(ui.cobrarAgrupar==="mes"?" on":"")+'" data-action="cobrar-agrupar" data-val="mes">Por mes</button>'
+        + '</div>';
+      function filaCobro(ev){
+        var v = ev.venta, esParcial = ev.monto < v.total - 0.009;
+        return '<div class="note-row">'
+          + '<div class="who"><span class="corr">N° '+numNota(v)+'</span> — '+escapeHtml(v.cliente)+' <span style="color:var(--ink-soft);">('+fechaDisplay(ev.fecha)+(esParcial?', abono parcial':'')+')</span></div>'
+          + '<div style="display:flex;align-items:center;gap:8px;"><span class="pay-tag '+metodoTagClass(ev.metodo)+'">'+metodoLabel(ev.metodo)+'</span><span class="amt">'+fmt(ev.monto)+'</span>'
+          + '<button class="go" data-action="ver-venta" data-id="'+v.id+'">ver</button></div>'
+          + '</div>';
+      }
+      function metodosTxt(lista){
+        var pm = {}; lista.forEach(function(ev){ pm[ev.metodo] = (pm[ev.metodo]||0)+ev.monto; });
+        return Object.keys(pm).map(function(k){ return metodoLabel(k)+' '+fmt(pm[k]); }).join(' · ');
+      }
+      function bloque(titulo, lista){
+        var tot = lista.reduce(function(s,ev){return s+ev.monto;},0);
+        var rows = lista.slice().sort(function(a,b){ return a.fecha<b.fecha?-1:a.fecha>b.fecha?1:0; }).map(filaCobro).join("");
+        return '<details class="month" open><summary>'+titulo+' · '+lista.length+' cobro'+(lista.length===1?'':'s')+' <span class="chev">▾</span> <span class="month-total">'+(verTotales()?fmt(tot):'')+'</span></summary>'
+          + (verTotales() ? '<div class="section-sub" style="margin:4px 0 6px;">'+metodosTxt(lista)+'</div>' : '')
+          + '<div class="day-block">'+rows+'</div></details>';
+      }
+      var body;
+      if(!eventos.length){
+        body = '<p class="empty">Sin cobros de pendientes registrados en '+(ui.cobrarAgrupar==="mes" ? String(ui.cobrarYear) : MESES[ui.cobrarMonth-1]+' '+ui.cobrarYear)+'.</p>';
+      } else if(ui.cobrarAgrupar==="mes"){
+        var porMes = {}; eventos.forEach(function(ev){ (porMes[ev.mes]=porMes[ev.mes]||[]).push(ev); });
+        body = Object.keys(porMes).map(Number).sort(function(a,b){return b-a;}).map(function(m){ return bloque(MESES[m-1]+' '+ui.cobrarYear, porMes[m]); }).join("");
+      } else if(ui.cobrarAgrupar==="semana"){
+        var porSem = {}; eventos.forEach(function(ev){ var w = Math.min(5, Math.floor((ev.dia-1)/7)+1); (porSem[w]=porSem[w]||[]).push(ev); });
+        var diasMes = new Date(ui.cobrarYear, ui.cobrarMonth, 0).getDate();
+        body = Object.keys(porSem).map(Number).sort(function(a,b){return b-a;}).map(function(w){
+          var desde = (w-1)*7+1, hasta = w===5 ? diasMes : Math.min(w*7, diasMes);
+          return bloque('Semana '+w+' ('+desde+'–'+hasta+' '+MESES_ABR[ui.cobrarMonth-1]+')', porSem[w]);
+        }).join("");
+      } else body = dias.map(function(d){
         var lista = byDia[d].slice().sort(function(a,b){ return (a.venta.creadoEn||0)-(b.venta.creadoEn||0); });
         var dTotal = lista.reduce(function(s,ev){return s+ev.monto;},0);
         var rows = lista.map(function(ev){
@@ -1897,10 +1934,11 @@
 
       return ''
         + '<h1 class="section-title">Historial de cobros</h1>'
-        + '<p class="section-sub">Notas que estuvieron pendientes de pago y ya se cobraron, por mes y fecha.</p>'
-        + '<div class="toolbar">'+yearStepper+monthStepper+soloMiosToggleHtml()+'</div>'
+        + '<p class="section-sub">Deudas cobradas (abonos y pagos de notas pendientes), por día, semana o mes.</p>'
+        + '<div class="toolbar">'+yearStepper+(ui.cobrarAgrupar==="mes" ? '' : monthStepper)+soloMiosToggleHtml()+'</div>'
         + vistaToggle
-        + (eventos.length ? '<div class="stat-row">'
+        + agrupToggle
+        + (eventos.length && verTotales() ? '<div class="stat-row">'
           + '  <div class="stat hi"><div class="label">Total cobrado</div><div class="value">'+fmt(totalCobrado)+'</div></div>'
           + (porMetodo.efectivo ? '  <div class="stat"><div class="label">Efectivo</div><div class="value" style="font-size:19px;">'+fmt(porMetodo.efectivo)+'</div></div>' : '')
           + (porMetodo.banco ? '  <div class="stat"><div class="label">Banco</div><div class="value" style="font-size:19px;">'+fmt(porMetodo.banco)+'</div></div>' : '')
@@ -3363,6 +3401,7 @@
     }
     else if(action==="resumen-vista"){ ui.resumenVista = t.getAttribute("data-vista"); renderTab(); }
     else if(action==="ver-deuda-cliente"){ ui.cobrarBuscar = t.getAttribute("data-nombre")||""; ui.cobrarVista = "pendientes"; state.tab = "cobrar"; renderTab(); }
+    else if(action==="cobrar-agrupar"){ ui.cobrarAgrupar = t.getAttribute("data-val"); renderTab(); }
     else if(action==="cobrar-vista"){ ui.cobrarVista = t.getAttribute("data-vista"); renderTab(); }
     else if(action==="cobrar-year-prev"){ ui.cobrarYear--; renderTab(); }
     else if(action==="cobrar-year-next"){ ui.cobrarYear++; renderTab(); }
