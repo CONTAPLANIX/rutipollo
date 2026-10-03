@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "26 sep · v45";
+  var APP_VERSION = "3 oct · v46";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -897,6 +897,8 @@
     persist("clientes");
   }
 
+  var aniosCargados = {};
+  var cargarAnioSiFalta = function(){};
   var ultimoErrorSync = "";
   function anotarErrorSync(e){
     var c = (e && (e.code || e.message)) || String(e || "");
@@ -1041,9 +1043,36 @@
           function iniciarVentas(esAdm, nombre){
             if(ventasConectadas) return;
             ventasConectadas = true;
+            var anioActual = (new Date()).getFullYear();
             var consulta = esAdm
-              ? db.collection("ventas").orderBy("creadoEn","desc").limit(1000)
+              ? db.collection("ventas").where("anio","==",anioActual)
               : db.collection("ventas").where("vendedor","==",nombre||"");
+            if(esAdm){
+              aniosCargados[anioActual] = true;
+              // Deudas de cualquier anio: asi Deudores siempre esta completo.
+              db.collection("ventas").where("pagado","==",false).onSnapshot(function(snap){
+                var cambios = [];
+                snap.docChanges().forEach(function(ch){
+                  if(ch.type==="removed"){
+                    // Dejo de estar pendiente (se pago) o se elimino: se vuelve a leer para tener su estado real.
+                    db.doc("ventas/"+ch.doc.id).get().then(function(d){
+                      if(d.exists) mergeRemoteVentas([{ type:"modified", doc:d }]); else mergeRemoteVentas([ch]);
+                      renderTab(); refreshSyncBadge();
+                    }).catch(function(){});
+                  } else cambios.push(ch);
+                });
+                if(cambios.length){ mergeRemoteVentas(cambios); if(state.tab==="historial" || state.tab==="resumen" || state.tab==="cobrar") renderTab(); refreshSyncBadge(); }
+              }, function(){});
+              cargarAnioSiFalta = function(anio){
+                anio = Number(anio);
+                if(!anio || aniosCargados[anio]) return;
+                aniosCargados[anio] = true;
+                db.collection("ventas").where("anio","==",anio).get().then(function(snap){
+                  mergeRemoteVentas(snap.docs.map(function(d){ return { type:"added", doc:d }; }));
+                  renderTab(); refreshSyncBadge();
+                }).catch(function(){ aniosCargados[anio] = false; });
+              };
+            }
             if(!esAdm){
               // Confidencial: en el celular de un vendedor no quedan notas de otros.
               state.ventas = state.ventas.filter(function(v){ return (v.vendedor||"") === (nombre||""); });
@@ -1062,7 +1091,7 @@
             refreshSyncBadge();
           }, function(){});
 
-          db.collection("clientes").orderBy("nombre","asc").limit(1000).onSnapshot(function(snap){
+          db.collection("clientes").orderBy("nombre","asc").limit(5000).onSnapshot(function(snap){
             mergeRemoteClientes(snap.docChanges());
             if(state.tab==="nueva") renderTab();
           }, function(){});
@@ -1418,6 +1447,9 @@
   }
   function renderTab(){
     aplicarPestanasPorRol();
+    if(state.tab==="historial") cargarAnioSiFalta(ui.historialYear);
+    else if(state.tab==="resumen") cargarAnioSiFalta(ui.resumenYear);
+    else if(state.tab==="cobrar") cargarAnioSiFalta(ui.cobrarYear);
     var main = document.getElementById("main");
     if(state.tab==="nueva") main.innerHTML = viewNueva();
     else if(state.tab==="historial") main.innerHTML = viewHistorial();
@@ -1548,6 +1580,7 @@
     state.ventas.forEach(function(v){ years[v.anio]=true; });
     years[ui.historialYear]=true;
     years[(new Date()).getFullYear()]=true;
+    for(var yy = 2026; yy <= (new Date()).getFullYear(); yy++) years[yy] = true;
     var yearList = Object.keys(years).map(Number).sort(function(a,b){return b-a;});
 
     var yearSel = '<select class="year-select" id="hist-year">' + yearList.map(function(y){
@@ -1768,6 +1801,7 @@
     var monthLabel = ui.resumenMonth===0 ? "Todo el año" : MESES[ui.resumenMonth-1];
     var anios = {}; state.ventas.forEach(function(v){ if(v.anio) anios[v.anio] = true; });
     anios[(new Date()).getFullYear()] = true; anios[ui.resumenYear] = true;
+    for(var ya = 2026; ya <= (new Date()).getFullYear(); ya++) anios[ya] = true;
     var yearStepper = '<label class="sel-wrap"><span>Año</span><select class="year-select" id="resumen-year">'
       + Object.keys(anios).map(Number).sort(function(a,b){ return b-a; }).map(function(y){ return '<option value="'+y+'"'+(y===ui.resumenYear?' selected':'')+'>'+y+'</option>'; }).join("")
       + '</select></label>';
