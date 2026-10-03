@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "3 oct · v46";
+  var APP_VERSION = "3 oct · v47";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1029,7 +1029,7 @@
             if(esAdmin(yo)){
               if(!listaAdminConectada){
                 listaAdminConectada = true;
-                db.collection("usuarios").orderBy("nombre","asc").limit(200).onSnapshot(function(ls){
+                db.collection("usuarios").orderBy("nombre","asc").onSnapshot(function(ls){
                   aplicarUsuariosRemotos(ls.docs.map(function(d){ return Object.assign({}, d.data(), { id:d.id, _synced:true }); }), uid);
                 }, function(){});
               }
@@ -1085,13 +1085,13 @@
             }, function(){ refreshSyncBadge(); });
           }
 
-          db.collection("productos").orderBy("nombre","asc").limit(500).onSnapshot(function(snap){
+          db.collection("productos").orderBy("nombre","asc").onSnapshot(function(snap){
             mergeRemoteProductos(snap.docChanges());
             if(state.tab==="productos" || state.tab==="nueva") renderTab();
             refreshSyncBadge();
           }, function(){});
 
-          db.collection("clientes").orderBy("nombre","asc").limit(5000).onSnapshot(function(snap){
+          db.collection("clientes").orderBy("nombre","asc").onSnapshot(function(snap){
             mergeRemoteClientes(snap.docChanges());
             if(state.tab==="nueva") renderTab();
           }, function(){});
