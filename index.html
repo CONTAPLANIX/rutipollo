@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "3 oct · v47";
+  var APP_VERSION = "3 oct · v48";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -1685,7 +1685,7 @@
       var k = v.vendedor || "(sin vendedor)";
       if(!por[k]) por[k] = { total:0, notas:0, cobrado:0, pendiente:0 };
       por[k].total += Number(v.total)||0; por[k].notas++;
-      por[k].cobrado += cobradoTotal([v]);
+      por[k].cobrado += cobradoVenta(v,"efectivo") + cobradoVenta(v,"banco") + cobradoVenta(v,"yape") + cobradoVenta(v,"plin");
       if(estaPendiente(v)) por[k].pendiente += saldoPendiente(v);
     });
     var nombres = Object.keys(por).sort(function(a,b){ return por[b].total - por[a].total; });
