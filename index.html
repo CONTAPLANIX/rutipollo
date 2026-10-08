@@ -478,7 +478,7 @@
     return sinRedondeo ? crudo : redondear10(crudo);
   }
   var MONEDA_NOMBRE = "SOLES";
-  var APP_VERSION = "3 oct · v48";
+  var APP_VERSION = "8 oct · v49";
   // Mensaje del pie en lineas centradas: "Gracias por su Compra" / "¡Hasta la próxima entrega!"
   function pieLineas(){
     var t = String(state.negocio.pie || "Gracias por su Compra. ¡Hasta la próxima entrega!");
@@ -636,6 +636,60 @@
     if(v.abonos && v.abonos.length) return v.abonos;
     if(v.pagado && v.fechaPago) return [{ monto:v.total, metodo:v.metodoPago, fecha:v.fechaPago }];
     return [];
+  }
+  // Cobros de deudas: cada abono o pago de una nota "pendiente de pago", por la FECHA EN QUE SE COBRO
+  // (no la fecha de la nota). Asi se ve cuanto se cobro cada dia, aunque la nota sea de otro mes.
+  function cobrosDeDeudas(pred){
+    var out = [];
+    state.ventas.forEach(function(v){
+      if(v.tipoPago!=="credito" || !pasaFiltroVendedor(v)) return;
+      abonosEfectivos(v).forEach(function(a){
+        var f = String(a.fecha||"").slice(0,10);
+        if(f.length!==10 || (pred && !pred(f))) return;
+        out.push({ venta:v, monto:Number(a.monto)||0, metodo:a.metodo||"efectivo", fecha:f });
+      });
+    });
+    return out.sort(function(a,b){ return a.fecha<b.fecha?1:a.fecha>b.fecha?-1:0; });
+  }
+  function cobrosPorScope(scope){
+    var y = String(ui.resumenYear), m = y+"-"+String(ui.resumenMonth).padStart(2,"0");
+    if(scope==="hoy") { var h = todayISO(); return cobrosDeDeudas(function(f){ return f===h; }); }
+    if(scope==="day") { var d = ui.resumenDiaSel || todayISO(); return cobrosDeDeudas(function(f){ return f===d; }); }
+    if(scope==="year") return cobrosDeDeudas(function(f){ return f.slice(0,4)===y; });
+    return cobrosDeDeudas(function(f){ return f.slice(0,7)===m; });
+  }
+  function sumaCobros(evs){ return evs.reduce(function(s,e){ return s+e.monto; }, 0); }
+  function cobroRowHtml(e){
+    return '<div class="note-row" style="flex-wrap:wrap;"><div class="who"><span class="corr">N° '+numNota(e.venta)+'</span> — '+escapeHtml(e.venta.cliente)+'</div>'
+      + '<div style="display:flex;align-items:center;gap:8px;"><span class="pay-tag '+metodoTagClass(e.metodo)+'">'+metodoAbrev(e.metodo)+'</span><span class="amt" style="color:#1d7a3e;">'+fmt(e.monto)+'</span>'
+      + '<button class="go" data-action="ver-venta" data-id="'+e.venta.id+'">ver</button></div>'
+      + '<div style="width:100%;font-size:11px;color:var(--ink-soft);">Nota del '+fechaDisplay(e.venta.fecha)+' · total '+fmt(e.venta.total)+'</div></div>';
+  }
+  // Tarjeta verde "Cobros de deudas" para el Resumen; al tocarla se abre el detalle.
+  function cobrosDeudaCardHtml(evs, label, scope){
+    if(!evs.length || !verTotales()) return '';
+    return '  <div class="stat" data-action="detalle-cobros" data-scope="'+scope+'"><div class="label" style="color:#1d7a3e;">'+label+'</div><div class="value" style="font-size:19px;color:#1d7a3e;">'+fmt(sumaCobros(evs))+'</div><div style="font-size:11px;color:var(--ink-soft);">'+evs.length+' cobro'+(evs.length===1?'':'s')+' · ver detalle ›</div></div>';
+  }
+  function abrirDetalleCobrosDeudas(titulo, evs){
+    var byDia = {};
+    evs.forEach(function(e){ (byDia[e.fecha]=byDia[e.fecha]||[]).push(e); });
+    var html = Object.keys(byDia).sort(function(a,b){ return b<a?-1:1; }).map(function(f){
+      var lista = byDia[f];
+      return '<h3 style="font-size:12.5px;margin:14px 0 6px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;"><span>'+fechaDisplay(f)+'</span><span class="mono" style="color:#1d7a3e;">'+fmt(sumaCobros(lista))+'</span></h3>'
+        + lista.map(cobroRowHtml).join("");
+    }).join("") || '<p class="empty">Sin cobros de deudas en este periodo.</p>';
+    var porMetodo = {};
+    evs.forEach(function(e){ porMetodo[e.metodo] = (porMetodo[e.metodo]||0)+e.monto; });
+    var resumenMet = Object.keys(porMetodo).map(function(m){ return metodoLabel(m)+' '+fmt(porMetodo[m]); }).join(' · ');
+    var root = document.getElementById("overlay-root");
+    root.innerHTML = '<div class="overlay" data-action="cerrar-overlay">'
+      + '  <div class="modal">'
+      + '    <h2>'+escapeHtml(titulo)+'</h2>'
+      + '    <p class="section-sub" style="margin-top:-6px;">Total <strong style="color:#1d7a3e;">'+fmt(sumaCobros(evs))+'</strong>'+(resumenMet ? ' · '+escapeHtml(resumenMet) : '')+'. Son abonos y pagos de notas pendientes, contados el día en que se cobraron.</p>'
+      + '    <div style="max-height:60vh;overflow-y:auto;">'+html+'</div>'
+      + '    <div class="actions-row"><button class="btn" data-action="cerrar-overlay">Cerrar</button></div>'
+      + '  </div>'
+      + '</div>';
   }
   function montoAbonado(v){
     return abonosEfectivos(v).reduce(function(s,a){ return s + (Number(a.monto)||0); }, 0);
@@ -1499,7 +1553,9 @@
     var todayStr = todayISO();
     var ventasHoy = state.ventas.filter(function(v){ return v.fecha===todayStr; });
     var totalHoy = ventasHoy.reduce(function(s,v){return s+v.total;},0);
-    var hoyStrip = '<div class="today-strip"><span>Hoy · '+ventasHoy.length+' nota'+(ventasHoy.length===1?'':'s')+'</span>'+(verTotales() ? '<span class="amt mono">'+fmt(totalHoy)+'</span>' : '')+'</div>';
+    var cobrosHoy = cobrosPorScope("hoy");
+    var hoyStrip = '<div class="today-strip"><span>Hoy · '+ventasHoy.length+' nota'+(ventasHoy.length===1?'':'s')+'</span>'+(verTotales() ? '<span class="amt mono">'+fmt(totalHoy)+'</span>' : '')+'</div>'
+      + (cobrosHoy.length && verTotales() ? '<div class="today-strip" data-action="detalle-cobros" data-scope="hoy" style="margin-top:-8px;cursor:pointer;"><span>Cobros de deudas hoy · '+cobrosHoy.length+'</span><span class="amt mono" style="color:#1d7a3e;">'+fmt(sumaCobros(cobrosHoy))+'</span></div>' : '');
 
     var editing = state.ventas.find(function(v){ return v.id===editingVentaId; });
     var rows = draft.items.map(itemRowHtml).join("");
@@ -1846,6 +1902,7 @@
         + (totalYape>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="yape" data-scope="year"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(totalYape)+'</div></div>' : '')
         + (totalPlin>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="plin" data-scope="year"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(totalPlin)+'</div></div>' : '')
         + (totalPorCobrar>0 ? '  <div class="stat" data-action="detalle-pendientes" data-scope="year"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(totalPorCobrar)+'</div></div>' : '')
+        + cobrosDeudaCardHtml(cobrosPorScope("year"), "Cobros de deudas "+ui.resumenYear, "year")
         + '</div>'
         + '<div class="card chart-card">'+svg+'</div>'
         + '<div class="items-wrap" style="margin-top:16px;"><table><thead><tr><th>Mes</th><th>Notas</th><th>Total</th></tr></thead><tbody>'+rowsTable+'</tbody></table></div>';
@@ -1870,6 +1927,7 @@
       var yapeDia = cobradoTotal(ventasDia, "yape");
       var plinDia = cobradoTotal(ventasDia, "plin");
       var cobrarDia = ventasDia.filter(estaPendiente).reduce(function(s,v){return s+saldoPendiente(v);},0);
+      var cobrosDia = cobrosDeDeudas(function(f){ return f===diaSel; });
       var filaDia = ventasDia.map(function(v){
         var payTag = payTagHtml(v);
         return '<div class="note-row">'
@@ -1895,8 +1953,10 @@
           + (yapeDia>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="yape" data-scope="day"><div class="label" style="color:#742284;">Yape</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeDia)+'</div></div>' : '')
           + (plinDia>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="plin" data-scope="day"><div class="label" style="color:#049a91;">Plin</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinDia)+'</div></div>' : '')
           + (cobrarDia>0 ? '  <div class="stat" data-action="detalle-pendientes" data-scope="day"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(cobrarDia)+'</div></div>' : '')
+          + cobrosDeudaCardHtml(cobrosDia, "Cobros de deudas del día", "day")
           + '</div>'
-          + '<div class="card" style="padding:6px 16px;">'+filaDia+'</div>');
+          + '<div class="card" style="padding:6px 16px;">'+filaDia+'</div>')
+        + (cobrosDia.length && verTotales() ? '<details class="month" open style="margin-top:14px;"><summary>Cobros de deudas del '+fechaDisplay(diaSel)+' <span class="chev">▾</span> <span class="month-total" style="color:#1d7a3e;">'+fmt(sumaCobros(cobrosDia))+'</span></summary><div class="day-block">'+cobrosDia.map(cobroRowHtml).join("")+'</div></details>' : '');
     }
 
     if(ui.resumenVista === "semanas"){
@@ -1937,6 +1997,7 @@
           + (yapeMesW>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="yape" data-scope="month"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeMesW)+'</div></div>' : '')
           + (plinMesW>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="plin" data-scope="month"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinMesW)+'</div></div>' : '')
           + (porCobrarMesW>0 ? '  <div class="stat" data-action="detalle-pendientes" data-scope="month"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(porCobrarMesW)+'</div></div>' : '')
+          + cobrosDeudaCardHtml(cobrosPorScope("month"), "Cobros de deudas del mes", "month")
           + '</div>'
           + '<div class="card chart-card">'+svgSemanas+'</div>'
           + bodySemanas);
@@ -1958,11 +2019,18 @@
     var svgDia = barChartSvg(dayLabels, dayTotals, "Ingresos por día en "+monthLabel);
     var byDiaMes = {};
     ventasMes.forEach(function(v){ (byDiaMes[v.dia]=byDiaMes[v.dia]||[]).push(v); });
-    var bodyDias = Object.keys(byDiaMes).map(Number).sort(function(a,b){return b-a;}).map(function(d){
-      var lista = byDiaMes[d].slice().sort(function(a,b){return (a.creadoEn||0)-(b.creadoEn||0);});
+    var cobrosMes = cobrosPorScope("month");
+    var cobrosPorDia = {};
+    if(verTotales()) cobrosMes.forEach(function(e){ var dd = Number(e.fecha.slice(8,10)); (cobrosPorDia[dd]=cobrosPorDia[dd]||[]).push(e); });
+    var diasConAlgo = {}; Object.keys(byDiaMes).forEach(function(d){ diasConAlgo[d]=1; }); Object.keys(cobrosPorDia).forEach(function(d){ diasConAlgo[d]=1; });
+    var bodyDias = Object.keys(diasConAlgo).map(Number).sort(function(a,b){return b-a;}).map(function(d){
+      var lista = (byDiaMes[d]||[]).slice().sort(function(a,b){return (a.creadoEn||0)-(b.creadoEn||0);});
       var dTotal = lista.reduce(function(s,v){return s+v.total;},0);
-      var rows = lista.map(notaRowHtml).join("");
-      return '<details class="month" open><summary>'+d+' '+MESES_ABR[ui.resumenMonth-1]+' <span class="chev">▾</span> <span class="month-total">'+fmt(dTotal)+'</span></summary><div class="day-block">'+rows+'</div></details>';
+      var rows = lista.map(notaRowHtml).join("") || '<p class="empty" style="padding:6px 0;">Sin ventas este día.</p>';
+      var cobrosD = cobrosPorDia[d]||[];
+      var cobrosHtml = cobrosD.length ? '<div class="day-head" style="margin-top:8px;"><span>Cobros de deudas · '+cobrosD.length+'</span><span class="mono" style="color:#1d7a3e;">'+fmt(sumaCobros(cobrosD))+'</span></div>'+cobrosD.map(cobroRowHtml).join("") : '';
+      var etiquetaCobro = cobrosD.length ? ' <span class="mono" style="color:#1d7a3e;font-size:12px;">+ cobros '+fmt(sumaCobros(cobrosD))+'</span>' : '';
+      return '<details class="month" open><summary>'+d+' '+MESES_ABR[ui.resumenMonth-1]+' <span class="chev">▾</span> <span class="month-total">'+fmt(dTotal)+etiquetaCobro+'</span></summary><div class="day-block">'+rows+cobrosHtml+'</div></details>';
     }).join("");
 
     return ''
@@ -1981,6 +2049,7 @@
         + (yapeMes>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="yape" data-scope="month"><div class="label" style="color:#742284;">Yape cobrado</div><div class="value" style="font-size:19px;color:#742284;">'+fmt(yapeMes)+'</div></div>' : '')
         + (plinMes>0 ? '  <div class="stat" data-action="detalle-metodo" data-metodo="plin" data-scope="month"><div class="label" style="color:#049a91;">Plin cobrado</div><div class="value" style="font-size:19px;color:#049a91;">'+fmt(plinMes)+'</div></div>' : '')
         + (porCobrarMes>0 ? '  <div class="stat" data-action="detalle-pendientes" data-scope="month"><div class="label">Por cobrar</div><div class="value" style="font-size:19px;color:var(--danger);">'+fmt(porCobrarMes)+'</div></div>' : '')
+        + cobrosDeudaCardHtml(cobrosMes, "Cobros de deudas del mes", "month")
         + '</div>'
         + '<div class="card chart-card">'+svgDia+'</div>'
         + bodyDias);
@@ -2155,6 +2224,7 @@
       + '<p class="section-sub">Busca un cliente para ver cuánto debe por mes y día. Al recibir el dinero, pon el monto y toca "Cobrado" con el método: si es todo el saldo, la nota deja de aparecer como pendiente.</p>'
       + vistaToggle
       + '<div class="toolbar">'+soloMiosToggleHtml()+(verTotales() ? '<span class="mono" style="color:var(--danger);font-weight:600;">Total por cobrar: '+fmt(totalPendiente)+'</span>' : '')+'</div>'
+      + (verTotales() && cobrosPorScope("hoy").length ? '<div class="toolbar"><span class="mono" style="color:#1d7a3e;font-weight:600;cursor:pointer;" data-action="detalle-cobros" data-scope="hoy">Cobrado hoy de deudas: '+fmt(sumaCobros(cobrosPorScope("hoy")))+' · ver detalle ›</span></div>' : '')
       + '<div class="field" style="max-width:420px;"><label for="cobrar-buscar">🔍 Buscar deudor (cliente que debe)</label><input id="cobrar-buscar" type="search" autocomplete="off" placeholder="Escribe el nombre del cliente" value="'+escapeHtml(ui.cobrarBuscar)+'"></div>'
       + '<div id="cobrar-lista">'+cobrarListaHtml(pendientes)+'</div>';
   }
@@ -3599,6 +3669,11 @@
       var poolD = poolResumenPorScope(t.getAttribute("data-scope"));
       var listaD = poolD.filter(function(v){ return cobradoVenta(v, metodoD) > 0.009; });
       abrirDetalleCobros(metodoLabel(metodoD)+" cobrado", listaD, metodoD);
+    }
+    else if(action==="detalle-cobros"){
+      var scopeC = t.getAttribute("data-scope");
+      var tituloC = scopeC==="hoy" ? "Cobros de deudas de hoy" : scopeC==="day" ? "Cobros de deudas del "+fechaDisplay(ui.resumenDiaSel||todayISO()) : scopeC==="year" ? "Cobros de deudas "+ui.resumenYear : "Cobros de deudas de "+MESES[ui.resumenMonth-1]+" "+ui.resumenYear;
+      abrirDetalleCobrosDeudas(tituloC, cobrosPorScope(scopeC));
     }
     else if(action==="detalle-pendientes"){
       var poolP = poolResumenPorScope(t.getAttribute("data-scope"));
